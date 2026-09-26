@@ -1,5 +1,5 @@
 # blackappleD fork only: builds BOCCHI-bld and publishes latest zip for the DalamudPlugins repo.
-# The tag (v4.2.0.15 → 4.2.0.15) drives the assembly version, so csproj <Version> stays upstream's.
+# The tag (v4.2.0.1501) drives the assembly version, so csproj <Version> stays upstream's.
 name: Release BOCCHI-bld
 
 on:
@@ -36,11 +36,22 @@ jobs:
           Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
           Expand-Archive -Force dalamud.zip "$env:AppData\XIVLauncher\addon\Hooks\dev\"
 
+      # 版本规则：上游版本最后一段 ×100 + 两位 fork 构建序号（01–99）。
+      # 例：上游 4.2.0.15 → v4.2.0.1501、v4.2.0.1502 …
       - name: Resolve version
         id: version
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
+          [xml]$csproj = Get-Content "${{ env.PROJECT }}"
+          $upstream = ($csproj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1)
+          $up = $upstream.Split('.')
+          $tag = $version.Split('.')
+          $prefixMatches = ($up[0..2] -join '.') -eq ($tag[0..2] -join '.')
+          $build = [int]$tag[3] - [int]$up[3] * 100
+          if (-not $prefixMatches -or $build -lt 1 -or $build -gt 99) {
+            throw "Tag $version does not follow upstream $upstream + two-digit build (expected $($up[0..2] -join '.').$([int]$up[3] * 100 + 1)..$([int]$up[3] * 100 + 99))"
+          }
           "value=$version" >> $env:GITHUB_OUTPUT
 
       - name: Build
