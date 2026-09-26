@@ -61,6 +61,12 @@ public sealed class Plugin(IDalamudPluginInterface plugin, IPluginLog logger) : 
         get => "BOCCHI";
     }
 
+    // Fork builds ship as InternalName "BOCCHI-bld"; keep the /bocchi command.
+    public override string CommandName
+    {
+        get => "BOCCHI";
+    }
+
     protected override void Bootstrap(IServiceCollection services)
     {
         BootstrapOcelotModules(services);

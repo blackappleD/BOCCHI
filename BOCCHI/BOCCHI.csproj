@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
     <PropertyGroup>
-        <AssemblyName>BOCCHI</AssemblyName>
+        <!-- blackappleD fork: suffixed InternalName so it can live in a separate Dalamud repo -->
+        <AssemblyName>BOCCHI-bld</AssemblyName>
+        <RootNamespace>BOCCHI</RootNamespace>
         <Version>4.2.0.15</Version>
         <IsPackable>false</IsPackable>
     </PropertyGroup>

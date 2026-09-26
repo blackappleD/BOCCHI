@@ -1,0 +1,69 @@
+# blackappleD fork only: builds BOCCHI-bld and publishes latest zip for the DalamudPlugins repo.
+# The tag (v4.2.0.15 → 4.2.0.15) drives the assembly version, so csproj <Version> stays upstream's.
+name: Release BOCCHI-bld
+
+on:
+  push:
+    tags:
+      - 'v*.*.*.*'
+
+env:
+  PROJECT: BOCCHI/BOCCHI.csproj
+  INTERNAL_NAME: BOCCHI-bld
+  CONFIGURATION: Release
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  release:
+    if: github.repository == 'blackappleD/BOCCHI'
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
+          Expand-Archive -Force dalamud.zip "$env:AppData\XIVLauncher\addon\Hooks\dev\"
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build
+        run: dotnet build ${{ env.PROJECT }} -c ${{ env.CONFIGURATION }} -p:Version=${{ steps.version.outputs.value }}
+
+      - name: Prepare release asset
+        shell: pwsh
+        run: |
+          $source = Get-ChildItem -Path BOCCHI\bin -Recurse -Filter latest.zip |
+            Where-Object { $_.Directory.Name -eq "${{ env.INTERNAL_NAME }}" } |
+            Select-Object -First 1
+          if (-not $source) {
+            throw "Dalamud package was not produced for ${{ env.INTERNAL_NAME }}"
+          }
+          Copy-Item $source.FullName "${{ env.INTERNAL_NAME }}.zip"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "${{ env.INTERNAL_NAME }}.zip" `
+            --repo "${{ github.repository }}" `
+            --title "BOCCHI-bld ${{ github.ref_name }}" `
+            --generate-notes
