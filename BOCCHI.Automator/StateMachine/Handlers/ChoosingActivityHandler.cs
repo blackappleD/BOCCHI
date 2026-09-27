@@ -115,8 +115,16 @@ public class ChoosingActivityHandler
         TryChoosePotPreposition();
     }
 
-    private Fate? FindStartableFate() =>
-        LivePotPriority.FindBest(
+    private Fate? FindStartableFate()
+    {
+        FateId? exclude = null;
+        RouteUnreachableGoalMemory? unreachable = IllegalModeActivityWork.TakeActiveUnreachable(memory);
+        if (unreachable?.Goal.GoalType is FateGoal(var fateId))
+        {
+            exclude = fateId;
+        }
+
+        return LivePotPriority.FindBest(
             fateRepository.Snapshot(),
             zones.GetZone(),
             fateScorer,
@@ -125,7 +133,9 @@ public class ChoosingActivityHandler
             fatesConfig,
             potsConfig,
             automatorContext,
-            fieldNotes);
+            fieldNotes,
+            exclude);
+    }
 
     private bool TryChoosePotPreposition()
     {
@@ -178,6 +188,13 @@ public class ChoosingActivityHandler
         }
 
         FateId predicted = new((ushort)cycle.PredictedNextPotFateId);
+        RouteUnreachableGoalMemory? unreachable = IllegalModeActivityWork.TakeActiveUnreachable(memory);
+        if (unreachable?.MatchesFate(predicted) == true)
+        {
+            return SkipPreposition(
+                $"route to pot FATE {predicted.Value} failed recently — waiting before retry");
+        }
+
         if (fateRepository.HasFate(predicted))
         {
             return SkipPreposition("pot FATE is already live — going to it, not prepositioning");

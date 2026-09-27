@@ -49,8 +49,14 @@ public interface IPotCycleTracker
     /// <summary>
     ///     Apply a shared pot spawn from another BOCCHI client on the same instance.
     ///     Ignored when a newer local (or equal) anchor already exists, or a pot is live locally.
+    ///     Pass <paramref name="overwriteExisting"/> for Eureka Linker so a mismatched BOCCHI
+    ///     anchor is replaced (live local pot still wins; matching anchors are a no-op).
     /// </summary>
-    bool TryApplyRemoteAnchor(int potFateId, DateTimeOffset spawnAt, ushort territoryTypeId);
+    bool TryApplyRemoteAnchor(
+        int potFateId,
+        DateTimeOffset spawnAt,
+        ushort territoryTypeId,
+        bool overwriteExisting = false);
 
     /// <summary>
     ///     Drop the saved schedule for a territory so a new island/instance can sync or re-anchor.
@@ -160,7 +166,11 @@ public sealed class PotCycleTracker
             string.IsNullOrEmpty(reason) ? "unspecified" : reason);
     }
 
-    public bool TryApplyRemoteAnchor(int potFateId, DateTimeOffset spawnAt, ushort territoryTypeId)
+    public bool TryApplyRemoteAnchor(
+        int potFateId,
+        DateTimeOffset spawnAt,
+        ushort territoryTypeId,
+        bool overwriteExisting = false)
     {
         IZone zone = zones.GetZone();
         if (!zone.IsOccultCrescentZone() || zone.TerritoryType != territoryTypeId)
@@ -178,14 +188,24 @@ public sealed class PotCycleTracker
             ? existing
             : Empty;
 
+        // Live local pot still wins — do not overwrite a pot you can see.
         if (previous.CurrentActivePotFateId != 0)
         {
             return false;
         }
 
-        if (previous.HasKnownAnchor
-            && previous.AnchorSpawnAt != DateTimeOffset.MinValue
-            && previous.AnchorSpawnAt >= spawnAt)
+        if (overwriteExisting)
+        {
+            if (previous.HasKnownAnchor
+                && previous.AnchorPotFateId == potFateId
+                && previous.AnchorSpawnAt.ToUnixTimeSeconds() == spawnAt.ToUnixTimeSeconds())
+            {
+                return false;
+            }
+        }
+        else if (previous.HasKnownAnchor
+                 && previous.AnchorSpawnAt != DateTimeOffset.MinValue
+                 && previous.AnchorSpawnAt >= spawnAt)
         {
             return false;
         }
@@ -209,7 +229,9 @@ public sealed class PotCycleTracker
         cycles[territoryTypeId] = applied;
         knownCyclesDirty = true;
         logger.Debug(
-            $"[PotCycleTracker] remote anchor zone={territoryTypeId} pot={potFateId} spawnAt={spawnAt:O} next={opposite?.Id ?? 0} nextSpawnAt={nextSpawn:O}");
+            overwriteExisting && previous.HasKnownAnchor
+                ? $"[PotCycleTracker] linker overwrite zone={territoryTypeId} pot={potFateId} spawnAt={spawnAt:O} (was pot={previous.AnchorPotFateId} spawnAt={previous.AnchorSpawnAt:O})"
+                : $"[PotCycleTracker] remote anchor zone={territoryTypeId} pot={potFateId} spawnAt={spawnAt:O} next={opposite?.Id ?? 0} nextSpawnAt={nextSpawn:O}");
         return true;
     }
 

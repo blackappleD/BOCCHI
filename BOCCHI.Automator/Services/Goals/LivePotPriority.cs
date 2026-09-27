@@ -62,18 +62,21 @@ internal static class LivePotPriority
         FatesConfig fatesConfig,
         PotsConfig potsConfig,
         IAutomatorContext automatorContext,
-        IFieldNoteTracker fieldNotes)
+        IFieldNoteTracker fieldNotes,
+        FateId? excludeFateId = null)
     {
         IZone zone = zones.GetZone();
         return fateRepository.Snapshot()
-            .FirstOrDefault(fate => IsStartable(
-                fate,
-                zone,
-                automatorConfig,
-                fatesConfig,
-                potsConfig,
-                automatorContext,
-                fieldNotes));
+            .FirstOrDefault(fate =>
+                (excludeFateId is not { } exclude || fate.Id != exclude)
+                && IsStartable(
+                    fate,
+                    zone,
+                    automatorConfig,
+                    fatesConfig,
+                    potsConfig,
+                    automatorContext,
+                    fieldNotes));
     }
 
     /// <summary>Best live pot, else best other FATE. No pot preposition.</summary>
@@ -86,7 +89,8 @@ internal static class LivePotPriority
         FatesConfig fatesConfig,
         PotsConfig potsConfig,
         IAutomatorContext automatorContext,
-        IFieldNoteTracker fieldNotes)
+        IFieldNoteTracker fieldNotes,
+        FateId? excludeFateId = null)
     {
         if (snapshot.Count == 0)
         {
@@ -118,6 +122,11 @@ internal static class LivePotPriority
 
         foreach (Fate fate in snapshot)
         {
+            if (excludeFateId is { } exclude && fate.Id == exclude)
+            {
+                continue;
+            }
+
             bool isPot = zone.IsPotFate(fate.Id.Value);
             if (isPot)
             {

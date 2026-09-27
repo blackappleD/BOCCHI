@@ -141,7 +141,7 @@
       "illegal_mode_off_left_zone": "[BOCCHI] Left Occult Crescent — Illegal Mode Off",
       "pathfinding_refreshed": "[BOCCHI] Route replanned",
       "pathfinding_refreshed_no_goal": "[BOCCHI] Route cleared (nothing to go to right now)",
-      "path_routing_failed": "[BOCCHI] Couldn't plan a route to that FATE/CE even after rebuilding the path map. Click Rebuild path map, or toggle Illegal Mode, then try again.",
+      "path_routing_failed": "[BOCCHI] Couldn't plan a route to that FATE/CE. Skipping it briefly — toggle Illegal Mode or Rebuild path map if it keeps happening.",
       "pot_chest_farm": "Pot chest farm",
       "chests_remaining": "Chests remaining",
       "time_idle": "Time idle"

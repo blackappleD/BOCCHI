@@ -43,7 +43,7 @@ public class AutomatorConfig : IAutoConfig
     ///     when it takes over Wrath's Occult Crescent settings. Applied when Illegal Mode / Mob
     ///     Farmer starts.
     /// </summary>
-    [WrathOccultOptionBlacklist(Order = 6, Indent = 1, Requires = nameof(UsesWrathCombo), Section = "combat")]
+    [WrathOccultOptionBlacklist(Order = 7, Indent = 1, Requires = nameof(UsesWrathCombo), Section = "combat")]
     [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
     public HashSet<string> DisabledWrathOccultOptions { get; set; } = [];
 
@@ -54,7 +54,7 @@ public class AutomatorConfig : IAutoConfig
     ///     change, Illegal Mode starts, or you change job / melee / ranged. When off, existing
     ///     presets are kept until you press Update presets.
     /// </summary>
-    [BossModPresetOptions(Order = 7, Indent = 1, Section = "combat")]
+    [BossModPresetOptions(Order = 8, Indent = 1, Section = "combat")]
     public bool UpdateBossModPresetsAutomatically { get; set; } = false;
 
     public bool BossModMaxDistanceByRole { get; set; } = true;

@@ -141,7 +141,7 @@
       "illegal_mode_off_left_zone": "[BOCCHI] オカルトクレセントを離れたため不正モード オフ",
       "pathfinding_refreshed": "[BOCCHI] ルートを作り直しました",
       "pathfinding_refreshed_no_goal": "[BOCCHI] ルートを解除しました（いま行く先がありません）",
-      "path_routing_failed": "[BOCCHI] そのFATE/CEへのルートを計画できませんでした（経路マップ再構築後も失敗）。「経路マップを再構築」を押すか不正モードを切り替えて、もう一度試してください。",
+      "path_routing_failed": "[BOCCHI] そのFATE/CEへのルートを計画できませんでした。しばらくスキップします — 繰り返す場合は不正モードを切り替えるか「経路マップを再構築」してください。",
       "pot_chest_farm": "マジックポット宝箱回収",
       "chests_remaining": "残り宝箱数",
       "time_idle": "待機時間"

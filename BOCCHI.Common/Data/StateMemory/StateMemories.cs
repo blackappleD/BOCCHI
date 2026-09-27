@@ -108,6 +108,25 @@ public sealed class PendingPotChestFarmMemory(FateId fateId)
 /// </summary>
 public sealed class NavigationInterruptedMemory;
 
+/// <summary>
+///     Brief skip after route planning failed for a FATE/CE — Choosing picks something else
+///     instead of hard-parking Illegal Mode on <see cref="NavigationInterruptedMemory"/>.
+/// </summary>
+public sealed class RouteUnreachableGoalMemory(IGoal goal, TimeSpan ttl)
+{
+    public IGoal Goal { get; } = goal;
+
+    private readonly DateTimeOffset until = DateTimeOffset.UtcNow + ttl;
+
+    public bool IsExpired => DateTimeOffset.UtcNow >= until;
+
+    public bool MatchesCriticalEncounter(CriticalEncounterId id) =>
+        !IsExpired && Goal.GoalType is CriticalEncounterGoal(var ce) && ce == id;
+
+    public bool MatchesFate(FateId id) =>
+        !IsExpired && Goal.GoalType is FateGoal(var fate) && fate == id;
+}
+
 /// <summary>Random idle at camp before the outbound teleport to a FATE/CE.</summary>
 public sealed class BaseTeleportDelayMemory(TimeSpan delay)
 {
@@ -413,6 +432,33 @@ public sealed class GoalPathStepMemory(IGoal goal, IPathCalculator calculator, b
     }
 
     public IPathStep? GetNextPathStep() => PathSteps.Count > 0 && PathSteps.TryPeek(out IPathStep? step) ? step : null;
+
+    /// <summary>
+    ///     True when the next hop is Teleport, or Pathfind→Teleport (walk to the pad).
+    ///     Combat cancel must not abort that approach — it remounts across the map (#174).
+    /// </summary>
+    public bool IsApproachingAethernetTeleport()
+    {
+        if (PathSteps.Count == 0)
+        {
+            return false;
+        }
+
+        using IEnumerator<IPathStep> e = PathSteps.GetEnumerator();
+        if (!e.MoveNext())
+        {
+            return false;
+        }
+
+        if (e.Current.Kind == PathStepKind.Teleport)
+        {
+            return true;
+        }
+
+        return e.Current.Kind == PathStepKind.Pathfind
+               && e.MoveNext()
+               && e.Current.Kind == PathStepKind.Teleport;
+    }
 
     public void DequeuePathStep()
     {

@@ -45,7 +45,9 @@ public sealed class FarmSpotListRenderer(IPlayer player) : IFieldRenderer<FarmSp
             {
                 FarmSpot spot = spots[i];
                 ImGui.PushID(i);
-                if (ImGui.CollapsingHeader($"{spot.Name}##spot{i}"))
+                // ### keeps the ImGui ID stable when the display name changes (## would remount
+                // the header each keystroke and steal InputText focus — GitHub #213).
+                if (ImGui.CollapsingHeader($"{spot.Name}###spot{i}"))
                 {
                     changed |= DrawSpot(spot, translator, fieldKey);
                     if (ImGui.Button(T(translator, fieldKey, "remove")))

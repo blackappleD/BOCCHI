@@ -9,6 +9,7 @@ using BOCCHI.Common.Data.Zones;
 using BOCCHI.Common.Data.Zones.Graph.Factory;
 using BOCCHI.Common.Data.Zones.Implementations.NorthHorn;
 using BOCCHI.Common.Data.Zones.Implementations.SouthHorn;
+using BOCCHI.Common.Ipc.EurekaLinker;
 using BOCCHI.Common.Ipc.GatherBuddy;
 using BOCCHI.Common.Ipc.Knightshopper;
 using BOCCHI.Common.Services;
@@ -157,6 +158,7 @@ public sealed class Plugin(IDalamudPluginInterface plugin, IPluginLog logger) : 
         services.AddSingleton<IShoppingBackend, GatherBuddyShoppingBackend>();
         services.AddSingleton<IShoppingBackend, KnightshopperShoppingBackend>();
         services.AddSingleton<ShoppingBackendSelector>();
+        services.AddSingleton<IEurekaLinkerIpc, EurekaLinkerIpc>();
         services.AddSingleton<ShoppingService>();
         services.AddSingleton<IShoppingService>(sp => sp.GetRequiredService<ShoppingService>());
         services.AddSingleton<Func<IShoppingService>>(sp => () => sp.GetRequiredService<IShoppingService>());

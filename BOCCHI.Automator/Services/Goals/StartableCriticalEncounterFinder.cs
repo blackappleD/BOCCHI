@@ -1,6 +1,10 @@
 using BOCCHI.Automator.Data;
+using BOCCHI.Automator.Services;
 using BOCCHI.Common.Config;
 using BOCCHI.Common.Data.CriticalEncounters;
+using BOCCHI.Common.Data.Fates;
+using BOCCHI.Common.Data.Goals;
+using BOCCHI.Common.Data.StateMemory;
 using BOCCHI.Common.Data.Zones;
 using BOCCHI.Common.Services;
 
@@ -17,7 +21,8 @@ public class StartableCriticalEncounterFinder
     IPotCycleTracker potCycle,
     IFateRepository fateRepository,
     IZoneProvider zones,
-    IFieldNoteTracker fieldNotes
+    IFieldNoteTracker fieldNotes,
+    IAutomatorMemory memory
 ) : IStartableCriticalEncounterFinder
 {
     public CriticalEncounter? FindStartable()
@@ -36,8 +41,11 @@ public class StartableCriticalEncounterFinder
             automatorConfig.ShouldFarmPotChests,
             automatorConfig.ShouldPrepositionToPots);
 
+        RouteUnreachableGoalMemory? unreachable = IllegalModeActivityWork.TakeActiveUnreachable(memory);
+        FateId? excludeFate = unreachable?.Goal.GoalType is FateGoal(var skipped) ? skipped : null;
+
         // Prefer pot FATEs: a live pot we would actually start outranks a CE.
-        // Skip / allowlist / Do FATEs / completionist still apply — a skipped pot must not block CEs.
+        // Skip / allowlist / unreachable / completionist still apply — a skipped pot must not block CEs.
         if (automatorConfig.PreferPotFates
             && LivePotPriority.FindStartable(
                 fateRepository,
@@ -46,7 +54,8 @@ public class StartableCriticalEncounterFinder
                 fatesConfig,
                 potsConfig,
                 automatorContext,
-                fieldNotes) != null)
+                fieldNotes,
+                excludeFate) != null)
         {
             return null;
         }
@@ -55,6 +64,11 @@ public class StartableCriticalEncounterFinder
         foreach (CriticalEncounter ce in criticalEncounterRepository.SnapshotWithoutForkedTower())
         {
             if (!ce.IsPreparing() || !criticalEncountersConfig.IsCriticalEncounterEnabled(ce.Id.Value))
+            {
+                continue;
+            }
+
+            if (unreachable?.MatchesCriticalEncounter(ce.Id) == true)
             {
                 continue;
             }

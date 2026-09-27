@@ -141,7 +141,7 @@
       "illegal_mode_off_left_zone": "[BOCCHI] 초승달 섬를 떠나 자동 모드 꺼짐",
       "pathfinding_refreshed": "[BOCCHI] 경로를 다시 짰습니다",
       "pathfinding_refreshed_no_goal": "[BOCCHI] 경로를 지웠습니다 (지금 갈 곳이 없음)",
-      "path_routing_failed": "[BOCCHI] 해당 FATE/CE로 가는 경로를 짤 수 없습니다(경로 맵 재구성 후에도 실패). 「경로 맵 다시 만들기」를 누르거나 자동 모드를 전환한 뒤 다시 시도하세요.",
+      "path_routing_failed": "[BOCCHI] 해당 FATE/CE로 가는 경로를 짤 수 없습니다. 잠시 건너뜁니다 — 계속되면 자동 모드를 전환하거나 「경로 맵 다시 만들기」를 누르세요.",
       "pot_chest_farm": "항아리 상자 파밍",
       "chests_remaining": "남은 상자",
       "time_idle": "대기 시간"

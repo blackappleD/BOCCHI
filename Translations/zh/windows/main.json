@@ -141,7 +141,7 @@
       "illegal_mode_off_left_zone": "[BOCCHI] 已离开神典石 — 违规模式已关闭",
       "pathfinding_refreshed": "[BOCCHI] 已重新规划路线",
       "pathfinding_refreshed_no_goal": "[BOCCHI] 已清除路线（当前没有可前往的目标）",
-      "path_routing_failed": "[BOCCHI] 无法规划前往该 FATE/CE 的路线（重建路径图后仍失败）。请点击「重建路径图」或切换违规模式后重试。",
+      "path_routing_failed": "[BOCCHI] 无法规划前往该 FATE/CE 的路线。会暂时跳过 — 若反复出现请切换违规模式或点击「重建路径图」。",
       "pot_chest_farm": "魔法罐宝箱收取",
       "chests_remaining": "剩余宝箱",
       "time_idle": "待机时长"

@@ -88,6 +88,20 @@ public class PathCalculator
 
     private async Task<PathCalculationResult> Calculate(IGoal goal, bool allowAutoRebuild)
     {
+        try
+        {
+            return await CalculateCore(goal, allowAutoRebuild);
+        }
+        catch (Exception ex)
+        {
+            // GoalPathStepMemory treats a faulted task as RoutingFailed with no log — catch here.
+            logger.Error(ex, "Path calculation faulted for {Goal}", goal.GoalType);
+            return PathCalculationResult.Failed();
+        }
+    }
+
+    private async Task<PathCalculationResult> CalculateCore(IGoal goal, bool allowAutoRebuild)
+    {
         if (objects.LocalPlayer is not { } player)
         {
             logger.Warn("No Player");
@@ -195,13 +209,20 @@ public class PathCalculator
 
         Vector3 arrivalCheck = potPrepositionStandOff ?? pathGoal.Position;
         float distanceToGoal = player.Position.Distance2D(arrivalCheck);
-        bool insideCeWait = ceCombatRadius > 0f
-                            && ceWaitCenter is { } waitCenter
-                            && NavigationConstants.IsInsideCriticalEncounterWaitArea(
-                                waitCenter,
-                                ceCombatRadius,
-                                ceShape,
-                                player.Position);
+        // LGB registration centre can skew from authored staging — accept either disc so we do not
+        // replan (and risk a vnav fault) after already walking to the stand-off.
+        bool insideCeWait = ceCombatRadius > 0f && (
+            (ceWaitCenter is { } waitCenter
+             && NavigationConstants.IsInsideCriticalEncounterWaitArea(
+                 waitCenter,
+                 ceCombatRadius,
+                 ceShape,
+                 player.Position))
+            || NavigationConstants.IsInsideCriticalEncounterWaitArea(
+                pathGoal.Position,
+                ceCombatRadius,
+                ceShape,
+                player.Position));
 
         if (insideCeWait)
         {
@@ -228,37 +249,49 @@ public class PathCalculator
         }
         else if (ceCombatRadius > 0f && ceWaitCenter is { } waitAt)
         {
-            float red = NavigationConstants.CriticalEncounterRedRadius(
-                NavigationConstants.CriticalEncounterPaddedRadius(ceCombatRadius, ceShape),
-                ceShape);
-            Vector3 approach = NavigationApproach.GetCriticalEncounterApproachPosition(
-                waitAt, red, ceShape, ceStandRadius, stableSeed: ceId);
-            if (TryResolveCriticalEncounterPathfindTarget(
-                    approach,
-                    waitAt,
-                    pathGoal.Position,
-                    player.Position,
-                    out Vector3 pathTarget))
+            try
             {
-                if (CriticalEncounterPathOverrides.TryGetApproachVias(
-                        zone.ZoneId,
-                        ceId,
+                float red = NavigationConstants.CriticalEncounterRedRadius(
+                    NavigationConstants.CriticalEncounterPaddedRadius(ceCombatRadius, ceShape),
+                    ceShape);
+                Vector3 approach = NavigationApproach.GetCriticalEncounterApproachPosition(
+                    waitAt, red, ceShape, ceStandRadius, stableSeed: ceId);
+                if (TryResolveCriticalEncounterPathfindTarget(
+                        approach,
+                        waitAt,
+                        pathGoal.Position,
                         player.Position,
-                        ceStaging,
-                        out IReadOnlyList<Vector3> vias))
+                        out Vector3 pathTarget))
                 {
-                    InsertPathfindBeforeLast(resolvedSteps, vias, NavigationConstants.EventArrivalRadius);
-                }
+                    if (CriticalEncounterPathOverrides.TryGetApproachVias(
+                            zone.ZoneId,
+                            ceId,
+                            player.Position,
+                            ceStaging,
+                            out IReadOnlyList<Vector3> vias))
+                    {
+                        InsertPathfindBeforeLast(resolvedSteps, vias, NavigationConstants.EventArrivalRadius);
+                    }
 
-                RewriteLastPathfind(resolvedSteps, pathTarget);
+                    RewriteLastPathfind(resolvedSteps, pathTarget);
+                }
+                else
+                {
+                    // Keep DirectWalk's last target — rewriting to an off-mesh wait centre
+                    // cancel/replans forever (Eternal Watch Y~1.22 under the platform).
+                    logger.Debug(
+                        "CE approach off-mesh at {Approach:F0} — keeping planned path toward {Goal:F0}",
+                        approach,
+                        pathGoal.Position);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                // Keep DirectWalk's last target — rewriting to an off-mesh wait centre
-                // cancel/replans forever (Eternal Watch Y~1.22 under the platform).
-                logger.Debug(
-                    "CE approach off-mesh at {Approach:F0} — keeping planned path toward {Goal:F0}",
-                    approach,
+                // vnav snap IPC can fault mid-rewrite; keep the graph plan so we do not
+                // surface RoutingFailed after calculators already found a cost.
+                logger.Warning(
+                    ex,
+                    "CE approach rewrite failed — keeping planned path toward {Goal:F0}",
                     pathGoal.Position);
             }
         }

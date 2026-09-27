@@ -508,7 +508,7 @@ public sealed class CarrotHunterService
         Vector3 standOff = departure.GetCampStandOffPosition(player.Position);
 
         if (zone.IsWithinLifestreamRange(player.Position)
-            || player.Position.Distance2D(standOff) <= AethernetNavigation.PathfindArrivalRadius + 0.35f)
+            || player.Position.Distance2D(standOff) <= AethernetNavigation.PathfindArrivalRadius + AethernetNavigation.PathfindArrivalSlack)
         {
             vnav.Stop();
             Phase = CarrotHuntPhase.Teleporting;

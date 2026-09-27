@@ -1,13 +1,15 @@
-# 4.2.0.15
+# 4.2.0.16
 
-### Share chest locations
-- Shared maps can now **fix wrong** built-in treasure chest and carrot spots, not only add missing ones
-- Magic Pot chest spots are shared the same way: uploaded when you open one, downloaded for farming — wrong ones get corrected, missing ones get added
-- Renamed from “Share maps” so it’s clear this is about chest and carrot places, not where you are standing
+### Illegal Mode
+- If it can’t find a path to a FATE or Critical Encounter, it no longer sits idle until you stop and start — it tries again, then briefly skips that one and picks something else
+- Less likely to get stuck right after walking into a Critical Encounter
+- Less likely to loop while one step short of an aetheryte (or the knowledge crystal when refreshing buffs)
 
-### Clearer wording everywhere
-- Config, status, chat, and logs use plainer language
-- Status and Details show FATE and Critical Encounter names, and simple travel steps (walking / teleport / return to camp)
-- Treasure Hunt, nearby chests, and farm spots no longer show raw IDs or world coordinates
-- FATEs & CEs list shows plain status (in progress, registering)
-- Clearer labels for combat rotation, travel plugin, path map, waiting status, and copying logs
+### Combat
+- You can turn off individual Wrath Combo phantom job actions (for example Berserker Rage) so Illegal Mode and Mob Farmer leave them off
+
+### Magic Pot timers
+- If Eureka Linker is installed and showing pot timers, Illegal Mode uses those times (your own live pot still wins when you see one)
+
+### Fixes
+- Farm spot name field no longer loses focus while typing

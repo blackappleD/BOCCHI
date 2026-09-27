@@ -121,6 +121,23 @@ internal static class IllegalModeActivityWork
         }
     }
 
+    /// <summary>Active route-skip latch, or null when missing/expired (expired entries are forgotten).</summary>
+    public static RouteUnreachableGoalMemory? TakeActiveUnreachable(IAutomatorMemory memory)
+    {
+        if (!memory.TryRemember<RouteUnreachableGoalMemory>(out RouteUnreachableGoalMemory skip))
+        {
+            return null;
+        }
+
+        if (skip.IsExpired)
+        {
+            memory.Forget<RouteUnreachableGoalMemory>();
+            return null;
+        }
+
+        return skip;
+    }
+
     private static void ForgetIfMatchesCurrent<T>(
         IAutomatorMemory memory,
         SupportJobId current,

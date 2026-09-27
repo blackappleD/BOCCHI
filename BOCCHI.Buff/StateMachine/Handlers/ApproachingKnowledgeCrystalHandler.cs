@@ -36,6 +36,9 @@ public class ApproachingKnowledgeCrystalHandler
 
     private const float ArrivalRadius = AethernetNavigation.PathfindArrivalRadius;
 
+    /// <summary>Vnav often stops a touch short of DistanceThreshold — don't re-queue forever.</summary>
+    private const float ArrivalSlack = AethernetNavigation.PathfindArrivalSlack;
+
     public override BuffState? Handle()
     {
         IZone zone = zones.GetZone();
@@ -88,7 +91,7 @@ public class ApproachingKnowledgeCrystalHandler
         float distToDest = player.Position.Distance2D(destination);
 
         // Same guard as aetheryte approach: do not re-queue when already on the stand-off tile.
-        if (pathfinder.GetState() == PathfindingState.Idle && distToDest > ArrivalRadius)
+        if (pathfinder.GetState() == PathfindingState.Idle && distToDest > ArrivalRadius + ArrivalSlack)
         {
             pathfinder.PathfindAndMoveTo(new(destination)
             {

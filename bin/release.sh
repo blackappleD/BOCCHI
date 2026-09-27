@@ -124,7 +124,7 @@ EXTRA_ARGS=()
 if [ "$IS_TESTING" = true ]; then
   EXTRA_ARGS+=(--prerelease)
 fi
-gh release create "$TAG" --title "$TAG" --generate-notes "${EXTRA_ARGS[@]}"
+gh release create "$TAG" --title "$TAG" --notes-file CHANGELOG.md "${EXTRA_ARGS[@]}"
 gh release upload "$TAG" "$ZIP_PATH" --clobber
 
 

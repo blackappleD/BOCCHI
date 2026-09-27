@@ -176,9 +176,10 @@ public class WalkTeleportWalkCalculator : IGraphCandidateCalculator
     {
         List<PathStep> steps = [];
         Vector3 standOff = departure.GetCampStandOffPosition(start);
-        float ready = GetNodeLifestreamReadyRadius(departure);
+        float ready = departure.GetNodeLifestreamReadyRadius();
+        float arrived = AethernetNavigation.PathfindArrivalRadius + AethernetNavigation.PathfindArrivalSlack;
         if (start.Distance2D(departure.Position) > ready
-            && start.Distance2D(standOff) > AethernetNavigation.PathfindArrivalRadius + 0.5f)
+            && start.Distance2D(standOff) > arrived)
         {
             steps.Add(PathStep.Pathfind(standOff, AethernetNavigation.PathfindArrivalRadius));
         }
@@ -200,12 +201,13 @@ public class WalkTeleportWalkCalculator : IGraphCandidateCalculator
     {
         List<PathStep> steps = [];
 
-        // Skip Pathfind only when already inside Lifestream (magenta); stand-off is on that ring.
-        float ready = GetNodeLifestreamReadyRadius(departure);
+        // Skip Pathfind when already inside Lifestream ready (body + arrival slack).
+        float ready = departure.GetNodeLifestreamReadyRadius();
         if (start.Distance2D(departure.Position) > ready)
         {
             Vector3 standOff = departure.GetCampStandOffPosition(start);
-            if (start.Distance2D(standOff) > AethernetNavigation.PathfindArrivalRadius + 0.5f)
+            float arrived = AethernetNavigation.PathfindArrivalRadius + AethernetNavigation.PathfindArrivalSlack;
+            if (start.Distance2D(standOff) > arrived)
             {
                 steps.Add(PathStep.Pathfind(standOff, AethernetNavigation.PathfindArrivalRadius));
             }
@@ -217,9 +219,4 @@ public class WalkTeleportWalkCalculator : IGraphCandidateCalculator
             NavigationConstants.EventArrivalRadius));
         return steps;
     }
-
-    private static float GetNodeLifestreamReadyRadius(Node node) =>
-        node.Metadata is TeleportNodeMetadata { DeadRadius: var dead }
-            ? MathF.Max(2f, dead)
-            : MathF.Max(2f, AethernetData.DefaultDeadRadius);
 }

@@ -157,10 +157,10 @@ public sealed unsafe class CombatPathfindCancelService
 
     private void CancelPathfinding()
     {
-        // Don't abort aethernet Teleport mid-hop — combat while walking to the camp pad
-        // was dropping Return→TP and remounting across the map (#174).
+        // Don't abort aethernet Teleport mid-hop, or the Pathfind onto the pad before it —
+        // combat while walking to the camp pad was dropping Return→TP and remounting (#174).
         if (memory.TryRemember<GoalPathStepMemory>(out GoalPathStepMemory path)
-            && path.GetNextPathStep()?.Kind == PathStepKind.Teleport)
+            && path.IsApproachingAethernetTeleport())
         {
             return;
         }

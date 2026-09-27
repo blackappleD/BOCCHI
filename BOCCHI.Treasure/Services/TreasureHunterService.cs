@@ -2118,7 +2118,7 @@ public class TreasureHunterService
 
         // Prefer Lifestream-ready (magenta) over raw crystal distance — stand-off may sit on the pad.
         if (zones.GetZone().IsWithinLifestreamRange(player.Position)
-            || player.Position.Distance2D(destination) <= AethernetNavigation.PathfindArrivalRadius + 0.35f)
+            || player.Position.Distance2D(destination) <= AethernetNavigation.PathfindArrivalRadius + AethernetNavigation.PathfindArrivalSlack)
         {
             vnav.Stop();
             return true;

@@ -12,6 +12,12 @@ public static class AethernetNavigation
     /// <summary>Arrival radius while closing on aetheryte rings.</summary>
     public const float PathfindArrivalRadius = 0.5f;
 
+    /// <summary>
+    ///     Extra slack when deciding we are already at the stand-off (vnav often stops a touch short).
+    ///     Treasure hunt uses the same figure.
+    /// </summary>
+    public const float PathfindArrivalSlack = 0.35f;
+
     public const float EdgeClearance = AethernetData.LifestreamEdgeClearance;
 
     public static Vector3 GetInteractPosition(this AethernetData data) => data.Destination != Vector3.Zero ? data.Destination : data.Position;
@@ -58,6 +64,10 @@ public static class AethernetNavigation
 
     public static Vector3 GetCampStandOffPosition(this Node node, Vector3? from = null)
         => GetRingPosition(node.Position, node.GetInteractPosition(), GetNodeBodyRadius(node), from);
+
+    /// <summary>Magenta + arrival slack — same meaning as <see cref="GetLifestreamReadyRadius"/>.</summary>
+    public static float GetNodeLifestreamReadyRadius(this Node node) =>
+        GetNodeBodyRadius(node) + PathfindArrivalRadius;
 
     private static float DefaultBodyRadius => MathF.Max(2f, AethernetData.DefaultDeadRadius);
 

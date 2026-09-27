@@ -44,11 +44,17 @@ public class PathfindingHandler
 {
     private static readonly TimeSpan MountBeforePauseTimeout = TimeSpan.FromSeconds(8);
 
+    private static readonly TimeSpan RouteUnreachableSkipTtl = TimeSpan.FromSeconds(90);
+
+    private const int MaxRoutingRetries = 3;
+
     private Task<ChainResult>? currentPathTask;
 
     private string? pendingPauseReason;
 
     private DateTime mountBeforePauseDeadline = DateTime.MinValue;
+
+    private int consecutiveRoutingFails;
 
     public override void Enter()
     {
@@ -127,13 +133,34 @@ public class PathfindingHandler
 
         path.Update();
 
-        // Route calc found nothing while still far from the goal — don't hang forever.
+        // Route calc found nothing while still far from the goal — retry, then skip that goal.
+        // Do not set NavigationInterruptedMemory: that parked Illegal Mode in Idle until toggle.
         if (path.RoutingFailed && currentPathTask == null)
         {
+            consecutiveRoutingFails++;
+            if (consecutiveRoutingFails < MaxRoutingRetries)
+            {
+                logger.Warning(
+                    "Route calc failed (attempt {Attempt}/{Max}) — retrying",
+                    consecutiveRoutingFails,
+                    MaxRoutingRetries);
+                currentPathTask = null;
+                pendingPauseReason = null;
+                memory.Forget<GoalPathStepMemory>();
+                memory.Forget<BaseTeleportDelayMemory>();
+                // GoalMemory kept — Automator rebuilds GoalPathStepMemory next tick.
+                return;
+            }
+
             string message = translator.T(".automation.automator.path_routing_failed");
             BocchiChat.PrintError(chat, uiConfig, message);
-            PauseForManualPathing(message);
+            DropUnreachableGoal(message);
             return;
+        }
+
+        if (!path.RoutingFailed && (path.GetNextPathStep() != null || path.IsEmptyPlan))
+        {
+            consecutiveRoutingFails = 0;
         }
 
         // Teleport-only mode: calc produced no Return/Teleport steps → pause for manual.
@@ -369,11 +396,31 @@ public class PathfindingHandler
         // GoalMemory kept — Automator.Update rebuilds GoalPathStepMemory.
     }
 
+    private void DropUnreachableGoal(string reason)
+    {
+        logger.Info("{Reason} — skipping this FATE/CE briefly so Illegal Mode can pick another", reason);
+        pathfinder.Stop();
+        ResetPathfinding();
+        consecutiveRoutingFails = 0;
+
+        if (memory.TryRemember<GoalMemory>(out GoalMemory goal))
+        {
+            memory.Forget<RouteUnreachableGoalMemory>();
+            memory.TryAdd(new RouteUnreachableGoalMemory(goal.Goal, RouteUnreachableSkipTtl));
+        }
+
+        memory.Forget<GoalPathStepMemory>();
+        memory.Forget<GoalMemory>();
+        memory.Forget<BaseTeleportDelayMemory>();
+        // No NavigationInterruptedMemory — Choosing can start the next activity.
+    }
+
     private void PauseForManualPathing(string reason)
     {
         logger.Info("{Reason} (toggle Illegal Mode to resume)", reason);
         pathfinder.Stop();
         ResetPathfinding();
+        consecutiveRoutingFails = 0;
         memory.Forget<GoalPathStepMemory>();
         memory.Forget<GoalMemory>();
         memory.Forget<BaseTeleportDelayMemory>();

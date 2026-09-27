@@ -1,6 +1,7 @@
 using BOCCHI.Common.Config;
 using BOCCHI.Common.Data.Fates;
 using BOCCHI.Common.Data.Zones;
+using BOCCHI.Common.Ipc.EurekaLinker;
 using Dalamud.Plugin;
 using Ocelot.Lifecycle;
 using Ocelot.Services.Logger;
@@ -13,7 +14,10 @@ using System.Text.Json.Serialization;
 
 namespace BOCCHI.Common.Services;
 
-/// <summary>Sync pot-cycle anchors with the BOCCHI Worker when shared maps are enabled.</summary>
+/// <summary>
+///     Prefer Eureka Linker pot timers when available; otherwise sync anchors with the BOCCHI
+///     Worker when shared maps are enabled.
+/// </summary>
 public sealed class PotCycleSyncService
 (
     TreasureConfig config,
@@ -22,6 +26,7 @@ public sealed class PotCycleSyncService
     IFateRepository fates,
     IPlayer player,
     IDalamudPluginInterface plugin,
+    IEurekaLinkerIpc eurekaLinker,
     ILogger<PotCycleSyncService> logger
 ) : IOnUpdate
 {
@@ -91,14 +96,16 @@ public sealed class PotCycleSyncService
     {
         ApplyCompletedWork();
 
-        if (!config.EnableSharedMaps)
+        IZone zone = zones.GetZone();
+        if (!zone.IsOccultCrescentZone())
         {
             ResetSession();
             return;
         }
 
-        IZone zone = zones.GetZone();
-        if (!zone.IsOccultCrescentZone())
+        TryApplyFromEurekaLinker(zone);
+
+        if (!config.EnableSharedMaps)
         {
             ResetSession();
             return;
@@ -120,6 +127,79 @@ public sealed class PotCycleSyncService
         PotCycleSnapshot snap = potCycles.Snapshot;
         StartUpload(snap, territory);
         StartFetch(snap, territory);
+    }
+
+    /// <summary>
+    /// Prefer Eureka Linker timers when loaded. Local live pot still wins inside the tracker.
+    /// Linker-sourced anchors are remote, so they are not uploaded to the BOCCHI Worker.
+    /// </summary>
+    private void TryApplyFromEurekaLinker(IZone zone)
+    {
+        if (!eurekaLinker.IsAvailable)
+        {
+            return;
+        }
+
+        if (!eurekaLinker.TryGetPotTimers(out EurekaLinkerPotTimer[] timers)
+            || !TryPickLinkerAnchor(timers, out EurekaLinkerPotTimer pick))
+        {
+            return;
+        }
+
+        DateTimeOffset spawnAt = DateTimeOffset.FromUnixTimeSeconds(pick.SpawnUnix);
+        ushort territory = zone.TerritoryType;
+        if (potCycles.TryApplyRemoteAnchor((int)pick.FateId, spawnAt, territory, overwriteExisting: true))
+        {
+            logger.Debug(
+                "[PotCycleSync] linker applied pot={PotId} spawn={Spawn} alive={Alive}",
+                pick.FateId,
+                pick.SpawnUnix,
+                pick.Alive);
+        }
+    }
+
+    private static bool TryPickLinkerAnchor(EurekaLinkerPotTimer[] timers, out EurekaLinkerPotTimer pick)
+    {
+        pick = default;
+        EurekaLinkerPotTimer? bestAlive = null;
+        EurekaLinkerPotTimer? bestSpawned = null;
+
+        foreach (EurekaLinkerPotTimer timer in timers)
+        {
+            if (timer.FateId == 0 || timer.SpawnUnix <= 0)
+            {
+                continue;
+            }
+
+            if (timer.Alive)
+            {
+                if (bestAlive is null || timer.SpawnUnix > bestAlive.Value.SpawnUnix)
+                {
+                    bestAlive = timer;
+                }
+
+                continue;
+            }
+
+            if (bestSpawned is null || timer.SpawnUnix > bestSpawned.Value.SpawnUnix)
+            {
+                bestSpawned = timer;
+            }
+        }
+
+        if (bestAlive is { } alive)
+        {
+            pick = alive;
+            return true;
+        }
+
+        if (bestSpawned is { } spawned)
+        {
+            pick = spawned;
+            return true;
+        }
+
+        return false;
     }
 
     private void ApplyCompletedWork()
