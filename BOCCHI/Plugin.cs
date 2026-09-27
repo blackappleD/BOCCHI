@@ -12,6 +12,7 @@ using BOCCHI.Common.Data.Zones.Implementations.SouthHorn;
 using BOCCHI.Common.Ipc.GatherBuddy;
 using BOCCHI.Common.Ipc.Knightshopper;
 using BOCCHI.Common.Services;
+using BOCCHI.Common.Services.PluginInstall;
 using BOCCHI.Common.Steps;
 using BOCCHI.Config;
 using BOCCHI.Data;
@@ -91,6 +92,7 @@ public sealed class Plugin(IDalamudPluginInterface plugin, IPluginLog logger) : 
         services.AddSingleton<IFieldRenderer<DisabledCriticalEncounterIdsAttribute>, DisabledCriticalEncounterIdsRenderer>();
         services.AddSingleton<IFieldRenderer<MountSelectAttribute>, MountSelectRenderer>();
         services.AddSingleton<IFieldRenderer<PluginDependencyStatusAttribute>, PluginDependencyStatusRenderer>();
+        services.AddSingleton<DependencyPluginInstaller>();
         services.AddSingleton<IFieldRenderer<LogsViewerAttribute>, LogsViewerRenderer>();
         services.AddSingleton<IMp3SoundPlayer, Mp3SoundPlayer>();
         services.AddSingleton<IFieldRenderer<Mp3SoundSelectAttribute>, Mp3SoundSelectRenderer>();
