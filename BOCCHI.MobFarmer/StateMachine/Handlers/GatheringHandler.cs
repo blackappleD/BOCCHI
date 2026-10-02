@@ -23,6 +23,7 @@ public class GatheringHandler
     IMobScanner scanner,
     FarmerPullAssist pull,
     IObjectTable objects,
+    IPartyList party,
     ITargetManager targets,
     IPathfinder pathfinder,
     ICondition conditions,
@@ -73,8 +74,11 @@ public class GatheringHandler
             return inCombat.Count > 0 ? FarmerPhase.Stacking : FarmerPhase.Waiting;
         }
 
+        // Chain-eligible mobs first (when enabled), then nearest.
+        int? chainLevel = config.PrioritizeChainMobs ? ChainBonus.MinimumChainLevel(objects, party) : null;
         List<IBattleNpc> ordered = notInCombat
-            .OrderBy(o => player.Position.Distance2D(o.Position))
+            .OrderBy(o => chainLevel is { } min && ChainBonus.IsEligible(o, min) ? 0 : 1)
+            .ThenBy(o => player.Position.Distance2D(o.Position))
             .ToList();
         IBattleNpc current = ordered[0];
         Vector3? nextPos = ordered.Count > 1

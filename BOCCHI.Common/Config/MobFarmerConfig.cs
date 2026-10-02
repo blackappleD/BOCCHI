@@ -25,11 +25,19 @@ public class MobFarmerConfig : IAutoConfig
     [IntRange(1, 50, Order = 4, Section = "targets")]
     public int MaxMobLevel { get; set; } = 40;
 
+    // Same Order as MaxMobLevel: the renderer breaks ties by name, so this lands right after it.
+    [Checkbox(Order = 4, Section = "targets")]
+    public bool PrioritizeChainMobs { get; set; } = false;
+
     [FloatRange(10f, 1000f, Order = 5, Section = "targets")]
     public float MaxEuclideanDistance { get; set; } = 75f;
 
     [FarmSpotList(Order = 6, Section = "spots")]
     public List<FarmSpot> Spots { get; set; } = [];
+
+    // Same Order as ClaimedSpotSeconds: name tie-break puts this right under the spot list.
+    [Checkbox(Order = 7, Section = "spots")]
+    public bool AutoTravelToMobArea { get; set; } = true;
 
     [FloatRange(3f, 30f, Order = 7, Section = "spots")]
     public float ClaimedSpotSeconds { get; set; } = 8f;

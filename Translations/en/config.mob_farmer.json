@@ -33,6 +33,10 @@
     "max_mob_level": {
       "label": "Max enemy level"
     },
+    "prioritize_chain_mobs": {
+      "label": "Prioritize chain mobs",
+      "tooltip": "Pull mobs that extend the EXP chain first: Knowledge at least your level +2 solo (+3 duo, up to +8 in a full party). Others are still pulled afterwards. Uses your synced Knowledge; Max enemy level still applies."
+    },
     "max_euclidean_distance": {
       "label": "Max pull range",
       "tooltip": "Ignore enemies farther than this (yalms)."
@@ -52,6 +56,10 @@
       "stack": "Stack / stop point",
       "set_stack": "Set stack point here",
       "min_fight": "Min enemies to fight (0 = default)"
+    },
+    "auto_travel_to_mob_area": {
+      "label": "Auto-travel to selected mob area",
+      "tooltip": "When no farm spot is enabled, walk to the known spawn area of the nearest selected mob in this zone. If the area is claimed by others, moves on to the next selected mob. Coordinates are approximate; night/weather-only mobs have no area."
     },
     "claimed_spot_seconds": {
       "label": "Leave if claimed after (seconds)",
