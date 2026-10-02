@@ -47,9 +47,30 @@ public class BuffRunner
             return;
         }
 
+        Begin(manual: true);
+    }
+
+    public void StartWalkIn()
+    {
+        DisabledReason = GetDisabledReason(requireInCastRange: false);
+        if (DisabledReason != null)
+        {
+            logger.Warning("Cannot start buff run: {Reason}", DisabledReason);
+            return;
+        }
+
+        Begin(manual: false);
+    }
+
+    private void Begin(bool manual)
+    {
         stateMachine = factory();
         memory.TryAdd<ApplyingBuffsMemory>();
-        memory.TryAdd<ManualBuffRunMemory>();
+        if (manual)
+        {
+            memory.TryAdd<ManualBuffRunMemory>();
+        }
+
         memory.Forget<InquiringMindAttemptedMemory>();
 
         if (jobs.TryGetCurrent(out SupportJob job))
@@ -58,7 +79,7 @@ public class BuffRunner
         }
 
         IsRunning = true;
-        logger.Info("Manual buff run started");
+        logger.Info(manual ? "Manual buff run started" : "Buff run started (walking to crystal)");
     }
 
     public void Stop()
@@ -113,7 +134,7 @@ public class BuffRunner
         CompleteIfJobRestored();
     }
 
-    private string? GetDisabledReason()
+    private string? GetDisabledReason(bool requireInCastRange = true)
     {
         if (IsRunning)
         {
@@ -136,7 +157,7 @@ public class BuffRunner
             return "You must be near a knowledge crystal.";
         }
 
-        if (!zone.IsInBuffCastRange(player.Position))
+        if (requireInCastRange && !zone.IsInBuffCastRange(player.Position))
         {
             return "Stand in the buff circle at the knowledge crystal.";
         }

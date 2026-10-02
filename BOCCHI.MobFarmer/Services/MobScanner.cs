@@ -36,7 +36,6 @@ public class MobScanner
 
     public unsafe void Update()
     {
-        // Occult Crescent only (the farmer panel still previews counts while stopped).
         if (!zones.GetZone().IsOccultCrescentZone())
         {
             ClearScan();
@@ -74,6 +73,12 @@ public class MobScanner
             .Where(o => player.Position.Distance2D(o.Position) <= config.MaxEuclideanDistance)
             .Where(o =>
             {
+                // Anything already attacking us must be fought, whatever the mob/level filters say.
+                if (o.IsTargetingPlayer(localPlayer))
+                {
+                    return true;
+                }
+
                 BattleChara* battleChara = (BattleChara*)o.Address;
                 // Level 0 = foray info unavailable; don't filter those out.
                 byte level = battleChara->ForayInfo.Level;
@@ -82,7 +87,6 @@ public class MobScanner
                     return false;
                 }
 
-                // Selected OC NameIds count even when not flagged hostile yet (common in caves).
                 if (MobData.IsSelected(o.NameId, config.Mobs))
                 {
                     return true;

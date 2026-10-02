@@ -58,118 +58,76 @@ public class FarmingPotChestsHandler
 
     private const float RevealSearchRadius = 28f;
 
-    /// <summary>
-    ///     Divert to any streamed pot coffer within this range even if it is not on an authored pad
-    ///     (authored list can miss a spawn while neighbors were already swept).
-    /// </summary>
     private const float LiveCofferDivertRadius = 80f;
 
-    /// <summary>
-    ///     Extra radius around the pot / 2nd-chance pad when deciding to Hide before walking in
-    ///     (on-player enter alone is too late once the pack has already aggroed).
-    /// </summary>
     private const float PotChestHideApproachLead = 55f;
 
-    /// <summary>
-    ///     Floor for on-player Hide enter during pot travel — shared treasure default (10y) is too
-    ///     tight when mounted packs pull before the gate ticks.
-    /// </summary>
     private const float PotChestHideThreatEnterFloor = 18f;
 
-    /// <summary>On-pad distance for the elixir probe (not coffer interact range).</summary>
     private const float CandidateProbeRadius = 5f;
+
+    private static readonly TimeSpan OffMeshWalkTimeout = TimeSpan.FromSeconds(10);
 
     private static readonly TimeSpan ChestSpawnWait = TimeSpan.FromSeconds(45);
 
-    /// <summary>
-    ///     Cache Me If You Can / Magical Elixir can appear shortly after the pot FATE despawns.
-    ///     Keep this longer than a frame or two so we do not abandon a real reward.
-    /// </summary>
     private static readonly TimeSpan BuffWaitTimeout = TimeSpan.FromSeconds(25);
 
     private static readonly TimeSpan HintWaitTimeout = TimeSpan.FromSeconds(4);
 
     private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(300);
 
-    /// <summary>
-    ///     Skip a pot treasure target when vnav sits idle this long without reaching it — it has no
-    ///     route to the pad (off-mesh pads, #176/#177).
-    /// </summary>
     private static readonly TimeSpan ApproachIdleTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>
-    ///     Backstop for vnav following a path but never arriving. Deliberately long: while it is
-    ///     moving it is presumed to be making real progress, however the straight-line distance looks.
-    /// </summary>
     private static readonly TimeSpan ApproachHardTimeout = TimeSpan.FromSeconds(90);
 
     private const float ApproachProgressThreshold = 1.5f;
 
-    /// <summary>Destination move that forces a fresh path even if one is already running.</summary>
     private const float RepathDrift = 2f;
 
-    /// <summary>
-    ///     Do not re-issue the same PathfindAndMoveTo while vnav is idle near the last pad
-    ///     (TreasureHunterService SameDestRepathCooldown). Without this, Idle + 750ms throttle
-    ///     spam-queues move-to on an already-reached pad and never opens.
-    /// </summary>
     private static readonly TimeSpan SameDestRepathCooldown = TimeSpan.FromSeconds(2.5);
 
-    /// <summary>Hard cap on the whole tail after Cache Me drops, including walking to the coffer.</summary>
     private static readonly TimeSpan PostBuffGrace = TimeSpan.FromSeconds(30);
 
-    /// <summary>How long to wait for the coffer object to appear before accepting there is none.</summary>
     private static readonly TimeSpan RevealSpawnGrace = TimeSpan.FromSeconds(5);
 
-    /// <summary>Once a coffer has been handled, how long to stay latched for a reroll.</summary>
     private static readonly TimeSpan RerollWait = TimeSpan.FromSeconds(12);
 
     private const int MaxElixirAttempts = 3;
 
     private Task<ChainResult>? activeChain;
 
-    /// <summary>Every treasure object this tick (see <see cref="RefreshTickChests"/>).</summary>
     private readonly List<IGameObject> tickChests = [];
 
-    /// <summary>Pot reveal coffers this tick — matched by BaseId, any ObjectKind.</summary>
     private readonly List<IGameObject> tickReveals = [];
 
     private readonly List<Vector3> authoredSpots = [];
 
-    /// <summary>Hunt coffer positions — objects nearer one of these are not pot reveals.</summary>
     private readonly List<Vector3> foreignSpots = [];
 
-    /// <summary>Last destination handed to the pathfinder, for drift detection.</summary>
     private Vector3? lastPathDestination;
 
-    /// <summary>When <see cref="lastPathDestination"/> was last issued (UTC).</summary>
     private DateTimeOffset lastPathIssueAt = DateTimeOffset.MinValue;
 
-    /// <summary>
-    ///     After a mid-route PathStep cancel, prefer plain PathfindAndMoveTo until we arrive or
-    ///     the destination drifts — avoids PathStep cancel ↔ recalculate thrash (~265ms loops).
-    /// </summary>
     private bool preferDirectApproach;
 
-    /// <summary>In-flight aethernet route plan for the current long hop.</summary>
     private Task<PathCalculationResult>? travelPlanTask;
 
-    /// <summary>Destination the current plan was built for.</summary>
     private Vector3? travelPlanTarget;
 
-    /// <summary>Remaining steps of the planned route; null when travelling on plain vnav.</summary>
     private Queue<IPathStep>? travelSteps;
 
     private Vector3? approachTarget;
 
+    private Vector3? offMeshTarget;
+
+    private DateTimeOffset offMeshSince = DateTimeOffset.MinValue;
+
     private DateTimeOffset approachSince = DateTimeOffset.MinValue;
 
-    /// <summary>When vnav went idle short of the target; MinValue while it is working.</summary>
     private DateTimeOffset approachIdleSince = DateTimeOffset.MinValue;
 
     private float approachBestDist = float.MaxValue;
 
-    /// <summary>True while the AI holds movement for a fight (see the combat branch in Handle).</summary>
     private bool defendingInCombat;
 
     private readonly NinjaHideRouteGate ninjaHideRouteGate = new();
@@ -183,7 +141,6 @@ public class FarmingPotChestsHandler
             return StatePriority.Never;
         }
 
-        // High priority vs Return/next-goal handoff race.
         return memory.TryRemember<PotChestFarmMemory>(out PotChestFarmMemory _)
             ? StatePriority.High
             : StatePriority.Never;
@@ -192,7 +149,6 @@ public class FarmingPotChestsHandler
     public override void Enter()
     {
         base.Enter();
-        // BossMod AI from the pot FATE otherwise keeps AutoTarget / movement during chest pathing.
         autoRotation.DisableAi();
         chainManager.CancelAll();
         pathfinder.Stop();
@@ -243,9 +199,6 @@ public class FarmingPotChestsHandler
 
         if (activeChain is { IsCompleted: false })
         {
-            // Travel chains block the handler for a long time — a compass hint that lands mid-walk
-            // would otherwise be applied from the arrival pad, not from where Magical Elixir was used.
-            // Open chains: re-Hide if interact dropped stealth while threats remain.
             if (farm.Phase == PotChestFarmPhase.OpeningReveal
                 || farm.Phase == PotChestFarmPhase.BlindSweep)
             {
@@ -274,8 +227,6 @@ public class FarmingPotChestsHandler
                 interrupt = true;
             }
 
-            // PathStep hops can run tens of seconds; Hide was only gated when issuing the hop.
-            // Poll mid-travel so packs on the way in arm Hide before aggro, not only at the pad.
             if (!interrupt
                 && farm.Phase is (PotChestFarmPhase.SearchingCandidates
                     or PotChestFarmPhase.ElixirAtCenter)
@@ -300,7 +251,6 @@ public class FarmingPotChestsHandler
             ResetApproachWatch();
             if (hidePrepInterrupt)
             {
-                // Keep lastPathDestination so EnsurePathing resumes the same pad after Hide.
                 preferDirectApproach = true;
             }
             else
@@ -310,8 +260,6 @@ public class FarmingPotChestsHandler
             }
         }
 
-        // PathStep hops often complete as canceled when vnav stops short of the issued point
-        // (PathfindToChain). Re-issuing a fresh aethernet plan every tick thrashes — finish on foot.
         if (activeChain is { IsCompleted: true } finishedChain)
         {
             ChainResult? finished = null;
@@ -324,7 +272,6 @@ public class FarmingPotChestsHandler
             }
             catch
             {
-                // Ignore faulted tasks — treat as a normal completion clear below.
             }
 
             if (finished is { IsCanceled: true })
@@ -338,7 +285,6 @@ public class FarmingPotChestsHandler
 
         activeChain = null;
 
-        // Combat is the one window where we do not drive movement — AI fights and dodges (#188).
         if (conditions[ConditionFlag.InCombat])
         {
             pathfinder.Stop();
@@ -367,8 +313,6 @@ public class FarmingPotChestsHandler
 
         RefreshTickChests(farm);
 
-        // Cache Me clears when the coffer is found, when the chests are done, or when the pot dies.
-        // Finding it is the common case, so check for a coffer to open before treating this as the end.
         if (farm.Phase != PotChestFarmPhase.WaitingForBuff && !HasTreasureBuff())
         {
             if (TryFinishRevealAfterBuff(farm))
@@ -383,8 +327,6 @@ public class FarmingPotChestsHandler
 
         farm.BuffLostUtc = DateTimeOffset.MinValue;
 
-        // Buff is back (reroll) — drop the grace latch and pick the search straight back up. Leaving
-        // the phase on OpeningReveal would idle 15s waiting on a coffer that is already looted.
         if (farm.HoldingAfterBuffLoss)
         {
             farm.HoldingAfterBuffLoss = false;
@@ -420,7 +362,6 @@ public class FarmingPotChestsHandler
         }
     }
 
-    /// <summary>Keep farming after Cache Me drops while a revealed coffer is still in front of us.</summary>
     private bool TryFinishRevealAfterBuff(PotChestFarmMemory farm)
     {
         if (farm.BuffLostUtc == DateTimeOffset.MinValue)
@@ -434,7 +375,6 @@ public class FarmingPotChestsHandler
             return false;
         }
 
-        // Reveal log can land on the same tick Cache Me drops — read it before the phase handlers.
         if (hints.TryGetEventSince(farm.HintRevisionBaseline, out PotTreasureHintEvent evt))
         {
             farm.HintRevisionBaseline = evt.Revision;
@@ -445,16 +385,13 @@ public class FarmingPotChestsHandler
             }
         }
 
-        // Match the reveal even if it is nearer the candidate pad than the player.
         if (!TryAcquireReveal(farm, out IGameObject? reveal) || reveal == null)
         {
             if (!farm.HoldingAfterBuffLoss)
             {
-                // Coffer object trails the buff drop — wait briefly before giving up.
                 return since < RevealSpawnGrace;
             }
 
-            // Coffer is gone (opened) — start the reroll wait from now, not from the buff drop.
             if (!farm.RerollWaitStarted)
             {
                 farm.RerollWaitStarted = true;
@@ -480,9 +417,8 @@ public class FarmingPotChestsHandler
         }
 
         float distance = player.Position.Distance2D(reveal.Position);
-        // MaxOpenAttemptDistance (not InteractDistance): vnav often parks in the 2–3.5y band
-        // and never reaches the tighter interact gate — open chain can still succeed there.
-        if (distance > OpenTreasureCofferChain.MaxOpenAttemptDistance)
+        // 12y, not 3.5: the open chain walks onto off-mesh coffers itself; vnav alone parks short of them.
+        if (distance > OpenTreasureCofferChain.OffMeshFinishRange)
         {
             if (!EnsurePathing(reveal.Position, allowRemount: false))
             {
@@ -506,7 +442,6 @@ public class FarmingPotChestsHandler
 
     private void HandleWaitingForBuff(PotChestFarmMemory farm)
     {
-        // Require Cache Me (1531); not Magical Elixir alone.
         if (HasTreasureBuff())
         {
             hints.Arm();
@@ -556,7 +491,6 @@ public class FarmingPotChestsHandler
                 return;
             }
 
-            // ElixirPrompt / Reveal without initial hint — keep waiting, bump baseline.
             farm.HintRevisionBaseline = evt.Revision;
         }
 
@@ -586,11 +520,6 @@ public class FarmingPotChestsHandler
         }
     }
 
-    /// <summary>
-    ///     Magical Elixir is a key item, so UseItem takes the KeyItems inventory path and works while
-    ///     mounted — dismounting here only cost the dismount and its landing beat. Reveals still need
-    ///     feet, but TryOpenChest dismounts itself once one actually appears (#175).
-    /// </summary>
     private bool TryUseElixir(PotChestFarmMemory farm)
     {
         // Game recast is ~5s — keep throttle slightly above so UseItem is not spammed on CD.
@@ -610,9 +539,6 @@ public class FarmingPotChestsHandler
         farm.HintRevisionBaseline = hints.Revision;
         farm.ElixirHintOrigin = player.Position;
 
-        // Start the "did anything happen" wait from the probe rather than from arrival. The elixir
-        // has a ~5s recast, so a candidate reached shortly after the previous probe could time out
-        // and be skipped before its own probe had even fired.
         farm.SettledAtUtc = DateTimeOffset.UtcNow;
         return true;
     }
@@ -627,7 +553,6 @@ public class FarmingPotChestsHandler
             return;
         }
 
-        // Authored list can miss a spawn — if a pot coffer is already streamed nearby, walk to it.
         if (FindUnopenedRevealNearPlayer(LiveCofferDivertRadius) is { } liveDivert)
         {
             if (EzThrottler.Throttle("PotChestFarm::LiveDivert", 5000))
@@ -691,13 +616,11 @@ public class FarmingPotChestsHandler
 
         if (farm.Candidates.Count == 0)
         {
-            // Exhausted candidates → re-read, not a 50-spot sweep.
             ResumeSearchOrBlind(farm);
             return;
         }
 
         Vector3 target = farm.Candidates.Peek().Position;
-        // Prefer a live coffer near the pad when the authored point is a bit off.
         IGameObject? live = FindUnopenedRevealNear(target) ?? FindUnopenedChestNear(target);
         Vector3 pathTarget = live?.Position ?? target;
         // Arrive at the snapped mesh point, not the authored pad — a 6–12y snap used to leave us
@@ -742,6 +665,12 @@ public class FarmingPotChestsHandler
             return;
         }
 
+        if (TryWalkOffMeshGap(target))
+        {
+            farm.SettledAtUtc = DateTimeOffset.MinValue;
+            return;
+        }
+
         ResetApproachWatch();
         pathfinder.Stop();
         if (farm.SettledAtUtc == DateTimeOffset.MinValue)
@@ -764,20 +693,47 @@ public class FarmingPotChestsHandler
             return;
         }
 
-        // Probe with elixir at the candidate — mounted is fine, it is a key item.
         if (farm.ElixirAttempts < MaxElixirAttempts)
         {
             TryUseElixir(farm);
         }
 
-        // Wait from when we settled on this pad — don't softlock if UseItem never succeeds,
-        // and don't use PhaseStartedUtc (that starts when the whole search begins).
         if (DateTimeOffset.UtcNow - farm.SettledAtUtc < HintWaitTimeout)
         {
             return;
         }
 
         SkipCurrentCandidate(farm);
+    }
+
+    private bool TryWalkOffMeshGap(Vector3 target)
+    {
+        float distance = player.Position.Distance2D(target);
+        if (distance <= CandidateProbeRadius || distance > OpenTreasureCofferChain.OffMeshFinishRange)
+        {
+            offMeshTarget = null;
+            return false;
+        }
+
+        if (offMeshTarget is not { } current || current.Distance2D(target) > 1f)
+        {
+            offMeshTarget = target;
+            offMeshSince = DateTimeOffset.UtcNow;
+            logger.Debug("Pot treasure: pad {Pos:F0} is {Dist:F1}y off the navmesh — walking the last stretch", target, distance);
+        }
+
+        if (DateTimeOffset.UtcNow - offMeshSince > OffMeshWalkTimeout)
+        {
+            return false;
+        }
+
+        if (!vnav.IsRunning() && EzThrottler.Throttle("PotChestFarm::OffMesh", 1500))
+        {
+            pathfinder.Stop();
+            vnav.FollowPath([player.Position, TreasurePathing.PathablePosition(target, player.Position.Y)], false);
+        }
+
+        return true;
     }
 
     private void SkipCurrentCandidate(PotChestFarmMemory farm)
@@ -795,10 +751,6 @@ public class FarmingPotChestsHandler
         pathfinder.Stop();
     }
 
-    /// <summary>
-    ///     Stuck means vnav cannot get us there. Only Moving counts as a real path —
-    ///     Pathfinding/idle looping is the off-mesh retry (#176/#194).
-    /// </summary>
     private bool IsApproachStuck(Vector3 target, float distance)
     {
         Vector3 pathable = PathableTreasurePosition(target);
@@ -865,19 +817,14 @@ public class FarmingPotChestsHandler
                 return;
             }
 
-            // Get on foot before closing the last stretch. Travel and the elixir are fine mounted,
-            // but the open needs to be within a few y of the coffer and that is not reliable from a
-            // mount — least of all in the air, where Dismount cannot land us on the spot.
             if (DismountAssist.TryDismount(conditions, ReportDismount))
             {
                 return;
             }
 
             // 2D — reveal Y ≈ -500 made 3D distance ~500y and blocked open forever (#170).
-            // Match OpenTreasureCofferChain's open-attempt range so we do not keep pathing in the
-            // 2–3.5y band where vnav often parks and never starts PotChestFarm::Open.
             float distance = player.Position.Distance2D(reveal.Position);
-            if (distance > OpenTreasureCofferChain.MaxOpenAttemptDistance)
+            if (distance > OpenTreasureCofferChain.OffMeshFinishRange)
             {
                 if (IsApproachStuck(reveal.Position, distance))
                 {
@@ -907,9 +854,6 @@ public class FarmingPotChestsHandler
             return;
         }
 
-        // Nothing to open here, and the compass is still talking: a hint arriving means the coffer is
-        // elsewhere. This phase never read hints, so one that landed here sat unread until the 15s
-        // timeout expired — a fifth of the whole Cache Me window spent standing still. Act on it now.
         if (hints.TryGetEventSince(farm.HintRevisionBaseline, out PotTreasureHintEvent evt)
             && evt.Kind == PotTreasureHintKind.Hint)
         {
@@ -956,7 +900,6 @@ public class FarmingPotChestsHandler
         ResumeSearchOrBlind(farm);
     }
 
-    /// <summary>Give up on narrowing after this many readings and just sweep.</summary>
     private const int MaxHintReadings = 10;
 
     private void ResumeSearchOrBlind(PotChestFarmMemory farm)
@@ -969,7 +912,6 @@ public class FarmingPotChestsHandler
             return;
         }
 
-        // Already looted one coffer — only second-chance pads from here on.
         if (farm.HasOpenedChest)
         {
             if (!EnsureSecondChancePool(farm))
@@ -990,7 +932,6 @@ public class FarmingPotChestsHandler
             return;
         }
 
-        // Narrowed set spent — re-read from the full pool instead of a 50-spot sweep.
         if (farm.Pool.Count > 0 && farm.HintsApplied < MaxHintReadings && HasTreasureBuff())
         {
             logger.Debug(
@@ -1073,7 +1014,7 @@ public class FarmingPotChestsHandler
 
         farm.WaitingForSpawnSince = DateTimeOffset.MinValue;
 
-        if (distance > OpenTreasureCofferChain.MaxOpenAttemptDistance)
+        if (distance > OpenTreasureCofferChain.OffMeshFinishRange)
         {
             if (IsApproachStuck(pathable, distance))
             {
@@ -1112,17 +1053,8 @@ public class FarmingPotChestsHandler
             farm.Chests.Count);
     }
 
-    /// <param name="allowRemount">
-    ///     False once we are closing on a coffer to open. The open path dismounts first, so remounting
-    ///     mid-approach just fights it — the two take turns and neither wins.
-    /// </param>
-    /// <param name="skipIfOffMesh">
-    ///     Authored pads: skip when vnav has no polygon. Live coffers still walk with a floor snap.
-    /// </param>
-    /// <returns>False when the pad is off-mesh and <paramref name="skipIfOffMesh"/> is set.</returns>
     private bool EnsurePathing(Vector3 destination, bool allowRemount = true, bool skipIfOffMesh = true)
     {
-        // Same gate as Treasure / Carrot Hunt — prepare Hide before walking into high-Knowledge mobs.
         if (!ApplyNinjaHideGate(destination))
         {
             return true;
@@ -1135,7 +1067,6 @@ public class FarmingPotChestsHandler
 
         float distance = player.Position.Distance2D(pathable);
 
-        // Already in open range — do not re-queue a walk that parks just outside interact.
         if (distance <= OpenTreasureCofferChain.MaxOpenAttemptDistance)
         {
             if (!pathfinder.IsIdle())
@@ -1147,22 +1078,17 @@ public class FarmingPotChestsHandler
             return true;
         }
 
-        // Long hops use the FATE/CE aethernet planner; short ones stay on vnav.
-        // After a canceled PathStep hop, preferDirectApproach skips re-planning until we arrive.
         if (TryTravelByPlan(pathable))
         {
             return true;
         }
 
-        // Re-path when the destination moves, not only when vnav is idle.
         bool drifted = lastPathDestination is not { } last || last.Distance2D(pathable) > RepathDrift;
         DateTimeOffset now = DateTimeOffset.UtcNow;
         bool sameDestCooldown = !drifted
             && lastPathIssueAt != DateTimeOffset.MinValue
             && now - lastPathIssueAt < SameDestRepathCooldown;
 
-        // Idle + still short of dest: PathfindToChain treats that as cancel; re-issuing every
-        // throttle tick thrashes. TreasureHunterService uses the same "parked" skip.
         bool parkedOnIssuedPoint = !drifted
             && pathfinder.IsIdle()
             && lastPathDestination is { } issued
@@ -1193,10 +1119,6 @@ public class FarmingPotChestsHandler
         return true;
     }
 
-    /// <summary>
-    ///     Plan and run an aethernet-assisted route to <paramref name="destination"/>.
-    ///     Returns true when travel is being handled here and the caller should not walk.
-    /// </summary>
     private bool TryTravelByPlan(Vector3 destination)
     {
         if (preferDirectApproach
@@ -1224,7 +1146,6 @@ public class FarmingPotChestsHandler
                 ? finished.Result
                 : PathCalculationResult.Failed();
 
-            // No route (or the planner faulted) — fall back to walking rather than stalling.
             if (result.RoutingFailed || result.Steps.Count == 0)
             {
                 travelPlanTarget = null;
@@ -1256,8 +1177,6 @@ public class FarmingPotChestsHandler
 
         if (travelSteps != null)
         {
-            // Plan spent — PathStep may have canceled short of the pad. Prefer direct vnav rather
-            // than calculating a fresh multi-hop plan every tick.
             ClearTravelPlan();
             preferDirectApproach = true;
             return false;
@@ -1279,13 +1198,12 @@ public class FarmingPotChestsHandler
     {
         potChests.Submit(farm.FateId.Value, ResolveIsReroll(chest.Position, farm), chest.Position);
 
-        // Pot reveals need feet — normal hunt coffers stay mounted (#175).
         if (DismountAssist.TryDismount(conditions, ReportDismount) || ECommonsPlayer.IsJumping)
         {
             return;
         }
 
-        Vector3 position = PathableTreasurePosition(chest.Position);
+        Vector3 position = TreasurePathing.PathablePosition(chest.Position, player.Position.Y);
         // Prefer reveal BaseIds — pot reveals are EventObj, not ObjectKind.Treasure. Always
         // include the chest we picked: an unknown-id coffer accepted on a pot spot would
         // otherwise never match and time out every 45s until the farm ends.
@@ -1299,9 +1217,6 @@ public class FarmingPotChestsHandler
         );
     }
 
-    /// <summary>
-    ///     Second-chance farm → reroll. Otherwise nearer baked/shared reroll pad than primary.
-    /// </summary>
     private bool ResolveIsReroll(Vector3 position, PotChestFarmMemory farm)
     {
         if (farm.OnRerollPool)
@@ -1365,12 +1280,6 @@ public class FarmingPotChestsHandler
         return false;
     }
 
-    /// <summary>
-    ///     A revealed coffer is in the object table for a beat before it can be interacted with, so
-    ///     require targetable before treating one as acquired — latching early means dismounting and
-    ///     pathing to something that cannot be opened yet. Not a fallback to the nearest untargetable
-    ///     one either: waiting is correct, and the coffer becomes targetable on its own.
-    /// </summary>
     private IGameObject? FindUnopenedRevealNear(Vector3 origin)
     {
         IGameObject? reveal = GameObjectNearest.Find2D(
@@ -1381,8 +1290,16 @@ public class FarmingPotChestsHandler
 
         if (reveal == null)
         {
-            if (FindRevealNear(origin) != null
-                && EzThrottler.Throttle("PotChestFarm::RevealNotTargetable", 2000))
+            // Reveals stay untargetable until in interact range — filtering on it left us idle 7y out until Cache Me expired.
+            IGameObject? untargetable = FindRevealNear(origin);
+            if (untargetable != null
+                && player.Position.Distance2D(untargetable.Position) <= OpenTreasureCofferChain.OffMeshFinishRange
+                && !OpenTreasureCofferChain.IsOpenedOrLooted(untargetable))
+            {
+                return untargetable;
+            }
+
+            if (untargetable != null && EzThrottler.Throttle("PotChestFarm::RevealNotTargetable", 2000))
             {
                 logger.Debug("Pot treasure: coffer on an authored spot is not targetable yet — waiting");
             }
@@ -1441,7 +1358,6 @@ public class FarmingPotChestsHandler
             treasureConfig.KnowledgeHideOffset,
             treasureConfig.KnowledgeThreatExitDistance);
 
-    /// <returns>False while still preparing Hide (caller should wait via EnsurePathing returning true).</returns>
     private bool ApplyNinjaHideGate(Vector3? approachingDestination = null)
     {
         if (!treasureConfig.UseNinjaHideOnDangerousRoutes)
@@ -1506,17 +1422,12 @@ public class FarmingPotChestsHandler
             enter,
             exit);
 
-        // Player-radius gate alone Hides too late for pot / 2nd-chance pads in packs — also arm
-        // when high-Knowledge mobs sit around the chest we are walking to.
         if (!ninjaHideRequired && approachingDestination is { } dest)
         {
             ninjaHideRequired = ShouldHideForDestination(dest);
         }
     }
 
-    /// <summary>
-    ///     True when a Hide-eligible threat is near the pad/coffer (wider than on-player enter).
-    /// </summary>
     private bool ShouldHideForDestination(Vector3 destination)
     {
         if (KnowledgeThreat.TryFindIsleblazer(
@@ -1558,7 +1469,6 @@ public class FarmingPotChestsHandler
             return;
         }
 
-        // Keep Hide requirement fresh while the open runs next to the pack.
         UpdateNinjaHideRequired();
         if (!ninjaHideRequired)
         {
@@ -1568,14 +1478,6 @@ public class FarmingPotChestsHandler
         _ = ninjaHide.EnsureReady(treasureConfig.NinjaGearsetNumber);
     }
 
-    /// <summary>
-    ///     Apply one hint: keep the spots lying in that direction <b>from where Magical Elixir was
-    ///     used</b> (or where the log landed, if we did not record a use). Mid-walk or next-pad
-    ///     positions must not re-interpret the bearing.
-    ///     Narrows the survivors first so successive readings triangulate; if that leaves nothing the
-    ///     reading disagrees with the ones before it, so re-acquire from the full set before giving up.
-    /// </summary>
-    /// <returns>False when the farm fell back to a blind sweep and the caller should stop.</returns>
     private bool TryNarrowByHint(PotChestFarmMemory farm, PotTreasureHintEvent evt)
     {
         Vector3 from = farm.ElixirHintOrigin ?? evt.Origin ?? player.Position;
@@ -1601,9 +1503,6 @@ public class FarmingPotChestsHandler
 
         if (survivors.Count == 0)
         {
-            // Everything we know says the chest is at one of these pads, so a reading that matches
-            // none of them is the odd one out — not grounds to throw away every earlier reading and
-            // sweep 50 positions. Keep what we have and ignore it; only sweep with nothing left.
             farm.ElixirHintOrigin = null;
             if (farm.Candidates.Count > 0)
             {
@@ -1637,7 +1536,6 @@ public class FarmingPotChestsHandler
         return true;
     }
 
-    /// <summary>Second-chance chests use reroll pads, not the pot FATE spots (#188).</summary>
     private void SwitchToRerollPool(PotChestFarmMemory farm)
     {
         if (!ShouldIncludeRerolls || farm.OnRerollPool)
@@ -1656,10 +1554,6 @@ public class FarmingPotChestsHandler
             farm.Pool.Count);
     }
 
-    /// <summary>
-    ///     After the first coffer, search only second-chance pads. Ends the farm when rerolls are
-    ///     disabled or missing — walking the pot FATE pads again cannot find that chest.
-    /// </summary>
     private bool EnsureSecondChancePool(PotChestFarmMemory farm)
     {
         if (farm.OnRerollPool && farm.Pool.Count > 0)
@@ -1715,7 +1609,6 @@ public class FarmingPotChestsHandler
         return true;
     }
 
-    /// <summary>Authored spots for the current search: pot FATE pads, or rerolls after a coffer.</summary>
     private List<PotTreasureCandidate> BuildActivePool(PotChestFarmMemory farm)
     {
         IZone zone = zones.GetZone();
@@ -1724,7 +1617,6 @@ public class FarmingPotChestsHandler
             : PotTreasureFilter.BuildPool(potChests.GetPrimaryPads(zone, farm.FateId.Value));
     }
 
-    /// <summary>Same opt-in the blind sweep uses, so pool and sweep cover the same pads.</summary>
     private bool ShouldIncludeRerolls =>
         context.IsPotsAndTreasure || potsConfig.ShouldFarmRerollPotChests;
 
@@ -1734,8 +1626,6 @@ public class FarmingPotChestsHandler
         IZone zone = zones.GetZone();
         List<Vector3> positions = [];
 
-        // After opening one coffer, only second-chance pads can host the next — never the pot
-        // FATE spots again (those were the first-chest set).
         if (farm.HasOpenedChest || farm.OnRerollPool)
         {
             if (!ShouldIncludeRerolls)
@@ -1759,7 +1649,6 @@ public class FarmingPotChestsHandler
         {
             positions.AddRange(potChests.GetPrimaryPads(zone, farm.FateId.Value).Select(c => c.Position));
 
-            // First-chest blind can still visit reroll pads as a last resort.
             if (ShouldIncludeRerolls)
             {
                 positions.AddRange(potChests.GetRerollPads(zone).Select(c => c.Position));
@@ -1792,10 +1681,6 @@ public class FarmingPotChestsHandler
     private bool HasTreasureBuff() =>
         player.PlayerCharacter?.StatusList.Has(PotTreasureIds.TreasureBuffStatusId) == true;
 
-    /// <summary>
-    ///     Every pot chest position for the current FATE, including rerolls (shared catalog when on).
-    ///     A pot reveal only ever appears on one of these, which is what separates it from ordinary field coffers.
-    /// </summary>
     private void EnsureAuthoredSpots(PotChestFarmMemory farm)
     {
         authoredSpots.Clear();
@@ -1811,7 +1696,6 @@ public class FarmingPotChestsHandler
                 .Select(t => t.Position!.Value));
     }
 
-    /// <summary>Rebuild <see cref="tickChests"/> once per tick for reveal matching.</summary>
     private void RefreshTickChests(PotChestFarmMemory farm)
     {
         EnsureAuthoredSpots(farm);
@@ -1825,7 +1709,6 @@ public class FarmingPotChestsHandler
                 continue;
             }
 
-            // Pot reveals are EventObj matched by BaseId, not ObjectKind.Treasure.
             if (PotTreasureIds.RevealCofferBaseIds.Contains(obj.BaseId))
             {
                 tickReveals.Add(obj);
@@ -1839,8 +1722,6 @@ public class FarmingPotChestsHandler
 
             tickChests.Add(obj);
 
-            // Safety net for a reveal id we do not know yet: a coffer sitting on an authored pot
-            // spot, and nearer that than any hunt coffer, is a reveal even if its BaseId is new.
             if (PotTreasureFilter.IsOnAuthoredPotSpot(obj.Position, authoredSpots, foreignSpots))
             {
                 tickReveals.Add(obj);
@@ -1862,11 +1743,6 @@ public class FarmingPotChestsHandler
     private IGameObject? FindRevealNear(Vector3 origin) =>
         GameObjectNearest.Find2D(tickReveals, origin, RevealSearchRadius);
 
-    /// <summary>
-    ///     A spot counts as spent only when there is a coffer there and none of them are still
-    ///     closed. Now that any treasure matches, "nearest one is open" would let a leftover layout
-    ///     bronze on the same spot retire a candidate whose pot chest has not been touched.
-    /// </summary>
     private bool IsChestOpened(Vector3 position) =>
         (FindChestNear(position) ?? FindRevealNear(position)) != null
         && FindUnopenedChestNear(position) == null

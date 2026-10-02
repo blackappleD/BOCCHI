@@ -42,7 +42,6 @@ public class InCombatHandler
             return StatePriority.Never;
         }
 
-        // Don't abandon Fate/CE transit to fight random trash on the road.
         if (memory.TryRemember<GoalPathStepMemory>(out GoalPathStepMemory _))
         {
             return StatePriority.Never;

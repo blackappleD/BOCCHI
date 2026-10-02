@@ -42,7 +42,6 @@ public sealed class ShoppingService(
     ILogger<ShoppingService> logger
 ) : IShoppingService, IOnUpdate
 {
-    /// <summary>Normal pause between auto-shop attempts after a completed run.</summary>
     private static readonly TimeSpan DefaultBuyCooldown = TimeSpan.FromSeconds(30);
 
     /// <summary>
@@ -92,7 +91,6 @@ public sealed class ShoppingService(
         AbortShopping(resumeAutomation: false, cancelRun: true);
     }
 
-    /// <inheritdoc />
     public bool TryForceStart(out string detail)
     {
         IShoppingBackend backend = backends.Current;
@@ -135,7 +133,6 @@ public sealed class ShoppingService(
         return true;
     }
 
-    /// <inheritdoc />
     public string DescribeStatus()
     {
         IShoppingBackend backend = Backend;
@@ -424,10 +421,6 @@ public sealed class ShoppingService(
         memory.TryRemember<PendingTriageMemory>(out PendingTriageMemory _)
         || memory.TryRemember<TriagingMemory>(out TriagingMemory _);
 
-    /// <summary>
-    /// Mob Farmer mid-pull / stack / fight — same window as other farmer yields.
-    /// Suspended farmer (e.g. treasure) is not busy; shopping may take over.
-    /// </summary>
     private bool IsMobFarmerBusy() =>
         Farmer.Running && !Farmer.Suspended && !Farmer.CanAcceptYield;
 }

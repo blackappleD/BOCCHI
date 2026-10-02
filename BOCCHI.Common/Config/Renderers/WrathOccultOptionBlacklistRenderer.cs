@@ -236,10 +236,6 @@ public sealed partial class WrathOccultOptionBlacklistRenderer(
         return map;
     }
 
-    /// <summary>
-    ///     <c>Phantom_Berserker_Rage</c> → the client's name for Rage. Sub-options
-    ///     (<c>Phantom_TimeMage_OccultSlowga_Wait</c>) keep their suffix: "Occult Slowga (Wait)".
-    /// </summary>
     private static string OptionLabel(string optionName, Dictionary<string, string> actionNames)
     {
         string[] parts = optionName.Split('_');

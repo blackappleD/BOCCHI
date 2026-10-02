@@ -12,5 +12,7 @@ public interface IBuffRunner
 
     void Start();
 
+    void StartWalkIn();
+
     void Stop();
 }

@@ -1,8 +1,17 @@
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Statuses;
 using Ocelot.Extensions;
 
 namespace BOCCHI.Common.Extensions;
+
+public static class BattleNpcExtensions
+{
+    public static bool HasTarget(this IGameObject obj) => obj.TargetObject != null;
+
+    public static bool IsTargetingPlayer(this IGameObject obj, IGameObject? player) =>
+        player != null && obj.TargetObject?.Address == player.Address;
+}
 
 public static class CharacterStatusExtensions
 {

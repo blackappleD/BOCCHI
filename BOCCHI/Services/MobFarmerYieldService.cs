@@ -1,6 +1,7 @@
 using BOCCHI.Automator.Services;
 using BOCCHI.Buff.Services;
 using BOCCHI.Common.Config;
+using BOCCHI.Common.Data.Aethernet;
 using BOCCHI.Common.Data.Fates;
 using BOCCHI.Common.Data.SupportJobs;
 using BOCCHI.Common.Data.Zones;
@@ -13,13 +14,14 @@ using BOCCHI.Treasure.Services;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using Ocelot.Chain;
+using Ocelot.Ipc.VNavmesh;
 using Ocelot.Lifecycle;
+using Ocelot.Services.Logger;
+using Ocelot.Services.Pathfinding;
+using Ocelot.Services.PlayerState;
 
 namespace BOCCHI.Services;
 
-/// <summary>
-///     Yields Mob Farmer to pots, Treasure Sight, Treasure Hunt, or knowledge-crystal buffs, then resumes.
-/// </summary>
 public sealed class MobFarmerYieldService
 (
     IMobFarmer farmer,
@@ -36,6 +38,11 @@ public sealed class MobFarmerYieldService
     ISupportJobFactory supportJobs,
     ISupportJobChanger supportJobChanger,
     ICondition conditions,
+    IGameGui gui,
+    IPathfinder pathfinder,
+    IVNavmeshIpc vnav,
+    IPlayer player,
+    ILogger<MobFarmerYieldService> logger,
     MobFarmerConfig farmerConfig,
     PotsConfig potsConfig,
     BuffConfig buffConfig,
@@ -56,11 +63,16 @@ public sealed class MobFarmerYieldService
 
     private bool startedBuffs;
 
+    private bool buffRunBegun;
+
+    private DateTimeOffset nextBuffAt = DateTimeOffset.MinValue;
+
+    private readonly CampReturnSession campReturn = new("MobFarmer::BuffReturn");
+
     private bool sawRunning;
 
     private Task<ChainResult>? sightChain;
 
-    /// <summary>Phantom job to restore after Sight when the chain fails before its restore step.</summary>
     private SupportJobId? pendingSightRestoreJob;
 
     private TimeSpan HuntIntervalMinutes =>
@@ -82,7 +94,6 @@ public sealed class MobFarmerYieldService
         {
             sawRunning = true;
             nextHuntAt = DateTimeOffset.UtcNow + HuntIntervalMinutes;
-            // Cast Sight as soon as yield is allowed — do not wait a full interval first.
             nextSightAt = DateTimeOffset.MinValue;
         }
 
@@ -119,16 +130,16 @@ public sealed class MobFarmerYieldService
             return;
         }
 
-        if (farmerConfig.YieldToCrystalBuffs && buffConfig.ShouldAutomateBuffs && buffs.ShouldRefreshAny())
+        if (farmerConfig.YieldToCrystalBuffs
+            && buffConfig.ShouldAutomateBuffs
+            && DateTimeOffset.UtcNow >= nextBuffAt
+            && buffs.ShouldRefreshAny()
+            && !buffRunner.IsRunning)
         {
-            if (!buffRunner.CanStart)
-            {
-                return;
-            }
-
             farmer.SetSuspended(true, FarmerYieldReason.CrystalBuffs);
-            buffRunner.Start();
             startedBuffs = true;
+            buffRunBegun = false;
+            logger.Info("Mob Farmer: crystal buffs low — heading to a knowledge crystal");
             return;
         }
 
@@ -190,20 +201,15 @@ public sealed class MobFarmerYieldService
                 break;
 
             case FarmerYieldReason.CrystalBuffs:
-                if (startedBuffs && !buffRunner.IsRunning)
-                {
-                    startedBuffs = false;
-                    farmer.SetSuspended(false);
-                }
-
+                TickCrystalBuffs();
                 break;
 
             case FarmerYieldReason.Shopping:
-                // Shopping may have interrupted a crystal-buff yield — clear the latch so we
-                // do not think buffs are still in progress after NotifyShoppingEnded (#203).
                 if (startedBuffs)
                 {
                     startedBuffs = false;
+                    buffRunBegun = false;
+                    campReturn.Cancel(chainManager, pathfinder, vnav);
                     if (buffRunner.IsRunning)
                     {
                         buffRunner.Stop();
@@ -211,6 +217,67 @@ public sealed class MobFarmerYieldService
                 }
 
                 break;
+        }
+    }
+
+    private void TickCrystalBuffs()
+    {
+        if (!startedBuffs)
+        {
+            return;
+        }
+
+        if (buffRunBegun)
+        {
+            if (!buffRunner.IsRunning)
+            {
+                FinishCrystalBuffs();
+            }
+
+            return;
+        }
+
+        IZone zone = zones.GetZone();
+        if (zone.HasNearbyKnowledgeCrystals())
+        {
+            campReturn.Cancel(chainManager, pathfinder, vnav);
+            buffRunner.StartWalkIn();
+            buffRunBegun = buffRunner.IsRunning;
+            if (!buffRunBegun)
+            {
+                logger.Warning("Mob Farmer: buff run did not start ({Reason}) — resuming farm", buffRunner.DisabledReason ?? "unknown");
+                FinishCrystalBuffs();
+            }
+
+            return;
+        }
+
+        CampReturnSession.TickResult result = campReturn.Tick(
+            zone,
+            player.Position,
+            blockedFromReturn: conditions[ConditionFlag.InCombat] || conditions[ConditionFlag.Unconscious],
+            zones,
+            conditions,
+            gui,
+            pathfinder,
+            vnav,
+            chainManager,
+            chains);
+
+        if (result == CampReturnSession.TickResult.Failed)
+        {
+            logger.Debug("Mob Farmer: Return for crystal buffs unfinished — retrying");
+        }
+    }
+
+    private void FinishCrystalBuffs()
+    {
+        startedBuffs = false;
+        buffRunBegun = false;
+        nextBuffAt = DateTimeOffset.UtcNow + TimeSpan.FromMinutes(5);
+        if (farmer.Suspended && farmer.YieldReason == FarmerYieldReason.CrystalBuffs)
+        {
+            farmer.SetSuspended(false);
         }
     }
 
@@ -247,6 +314,8 @@ public sealed class MobFarmerYieldService
         if (startedBuffs)
         {
             startedBuffs = false;
+            buffRunBegun = false;
+            campReturn.Cancel(chainManager, pathfinder, vnav);
             if (buffRunner.IsRunning)
             {
                 buffRunner.Stop();
@@ -271,6 +340,12 @@ public sealed class MobFarmerYieldService
             return false;
         }
 
+        // Walking back to the spot mounts; dismounting for Sight here made them fight every tick.
+        if (farmer.NeedsApproachSpot)
+        {
+            return false;
+        }
+
         // Do not start the chain until dismount + job-swap gates pass — otherwise a step
         // spins for 15s (Dismount / ToFreelancer / RestoreJob) and the farm sits idle.
         if (DismountAssist.TryDismount(conditions)
@@ -286,9 +361,6 @@ public sealed class MobFarmerYieldService
             pendingSightRestoreJob = current.Id;
         }
 
-        // Do not gate on fill % or an existing Sight reading — this yield is how Mob Farmer
-        // refreshes counts (and the first cast of a session). Timed Treasure Hunt still uses
-        // TreasureHuntFillGate.
         sightChain = chainManager.Manage(
             chains.Create("MobFarmer::TreasureSight")
                 .Then<HuntTreasureSightChain>());

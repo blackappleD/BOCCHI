@@ -1,15 +1,20 @@
-# 4.2.0.16
+# 4.2.0.17
+
+### Mob Farmer
+- "Refresh crystal buffs when low" now works: it heads back to camp, rebuffs at the knowledge crystal, then returns to your farm spot
+- After pausing for pots, Treasure Hunt or buffs, it walks back to the farm spot instead of standing where it ended up
+- No longer leaves for pots in the middle of a pull
+- Keeps fighting mobs that aggro on their own, even ones outside your mob selection or level limit
+- No more mount/unmount spam while walking back to the farm spot
 
 ### Illegal Mode
-- If it can’t find a path to a FATE or Critical Encounter, it no longer sits idle until you stop and start — it tries again, then briefly skips that one and picks something else
-- Less likely to get stuck right after walking into a Critical Encounter
-- Less likely to loop while one step short of an aetheryte (or the knowledge crystal when refreshing buffs)
+- No longer waits for pot chests after skipping a pot FATE it never joined
 
-### Combat
-- You can turn off individual Wrath Combo phantom job actions (for example Berserker Rage) so Illegal Mode and Mob Farmer leave them off
-
-### Magic Pot timers
-- If Eureka Linker is installed and showing pot timers, Illegal Mode uses those times (your own live pot still wins when you see one)
+### Dependencies
+- Missing plugins can be installed straight from the Dependencies page: add the repository and install in one click, or open the installer for ones that are installed but turned off
 
 ### Fixes
-- Farm spot name field no longer loses focus while typing
+- Phantom job names in the Wrath Combo action list now follow the plugin language instead of the game client language
+- Pot chests that sit off the navmesh can be reached and opened again: BOCCHI walks the last few yalms in a straight line instead of stopping short
+- A revealed pot chest is opened even when BOCCHI got stuck a few yalms away, instead of waiting there until the buff runs out
+- Treasure Hunt jumps up onto ledge coffers again (e.g. the Wanderer's Haven west coast) instead of giving up on them
