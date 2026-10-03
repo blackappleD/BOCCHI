@@ -1,5 +1,7 @@
 using System.Numerics;
+using BOCCHI.Automator.Services;
 using BOCCHI.Common;
+using BOCCHI.Common.Services;
 using BOCCHI.Common.Config;
 using BOCCHI.Common.Data.Zones;
 using Dalamud.Game.ClientState.Conditions;
@@ -33,6 +35,7 @@ public sealed unsafe class OccultAutoEntryService(
     IDataManager data,
     IChatGui chat,
     IVNavmeshIpc vnav,
+    IAutomator automator,
     ILogger<OccultAutoEntryService> logger
 ) : IOnUpdate, IOnTerritoryChanged
 {
@@ -69,6 +72,13 @@ public sealed unsafe class OccultAutoEntryService(
 
     private static readonly TimeSpan MenuGrace = TimeSpan.FromSeconds(3);
 
+    // Set when an auto-entry lands on the island; Illegal Mode starts once the island has loaded.
+    private DateTime illegalModeDueAt = DateTime.MinValue;
+
+    private static readonly TimeSpan IllegalModeDelay = TimeSpan.FromSeconds(5);
+
+    private static readonly TimeSpan IllegalModeWindow = TimeSpan.FromMinutes(1);
+
     public OccultAutoEntryState State { get; private set; } = OccultAutoEntryState.Idle;
 
     public UpdateLimit UpdateLimit { get; } = new()
@@ -84,9 +94,10 @@ public sealed unsafe class OccultAutoEntryService(
 
         if (IsIsland(territory))
         {
-            if (State != OccultAutoEntryState.Idle)
+            if (State == OccultAutoEntryState.Running)
             {
-                logger.Info("[AutoEntry] Entered {Zone}; done", (ZoneId)territory);
+                logger.Info("[AutoEntry] Entered {Zone}; Illegal Mode starts shortly", (ZoneId)territory);
+                illegalModeDueAt = DateTime.UtcNow + IllegalModeDelay;
             }
 
             Reset();
@@ -140,8 +151,11 @@ public sealed unsafe class OccultAutoEntryService(
         if (IsIsland(territory))
         {
             TrackTimeLeft();
+            StartIllegalModeWhenReady();
             return;
         }
+
+        illegalModeDueAt = DateTime.MinValue;
 
         if (State == OccultAutoEntryState.Idle)
         {
@@ -235,6 +249,38 @@ public sealed unsafe class OccultAutoEntryService(
 
     private static bool IsIsland(uint territory) =>
         territory is (ushort)ZoneId.SouthHorn or (ushort)ZoneId.NorthHorn;
+
+    private void StartIllegalModeWhenReady()
+    {
+        if (illegalModeDueAt == DateTime.MinValue || DateTime.UtcNow < illegalModeDueAt)
+        {
+            return;
+        }
+
+        if (DateTime.UtcNow - illegalModeDueAt > IllegalModeWindow)
+        {
+            logger.Warning("[AutoEntry] Island never finished loading; Illegal Mode not started");
+            illegalModeDueAt = DateTime.MinValue;
+            return;
+        }
+
+        if (objects.LocalPlayer == null
+            || condition[ConditionFlag.BetweenAreas]
+            || condition[ConditionFlag.BetweenAreas51]
+            || !OccultCrescentHelper.IsStateAvailable())
+        {
+            return;
+        }
+
+        illegalModeDueAt = DateTime.MinValue;
+        if (automator.IsIllegalMode)
+        {
+            return;
+        }
+
+        logger.Info("[AutoEntry] Starting Illegal Mode");
+        automator.Toggle();
+    }
 
     private void TrackTimeLeft()
     {

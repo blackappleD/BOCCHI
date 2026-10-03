@@ -3,7 +3,7 @@
   "unsupported_zone": "Go to Occult Crescent (South or North Horn) to use BOCCHI.",
   "auto_entry": {
     "enable": "Auto mode: re-enter when the instance timer runs out",
-    "enable_tooltip": "When the Occult Crescent timer expires and you are sent back to the Phantom Village, walk to Jeffroy and enter the island picked below.\nLeaving manually (time still left) never triggers it.",
+    "enable_tooltip": "When the Occult Crescent timer expires and you are sent back to the Phantom Village, walk to Jeffroy, enter the island picked below, and start Illegal Mode once inside.\nLeaving manually (time still left) never triggers it.",
     "enter_now": "Enter now",
     "enter_now_tooltip": "In the Phantom Village: walk to Jeffroy and enter the selected island now.",
     "running": "Auto-entering…",
