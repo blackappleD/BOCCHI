@@ -107,6 +107,8 @@ public sealed class Plugin(IDalamudPluginInterface plugin, IPluginLog logger) : 
         services.AddSingleton<NoOpFilter<AutoRepairMethod>>();
         services.AddSingleton<ShoppingBackendKindDisplay>();
         services.AddSingleton<NoOpFilter<ShoppingBackendKind>>();
+        services.AddSingleton<HuntEndStartModeDisplay>();
+        services.AddSingleton<NoOpFilter<HuntEndStartMode>>();
         services.AddSingleton<IFieldRenderer<GatherBuddyListSelectAttribute>, GatherBuddyListSelectRenderer>();
         services.AddSingleton<IFieldRenderer<TriageRaiseJobAttribute>, TriageRaiseJobRenderer>();
         services.AddSingleton<IFieldRenderer<BossModPresetOptionsAttribute>, BossModPresetOptionsRenderer>();

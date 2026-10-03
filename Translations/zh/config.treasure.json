@@ -45,6 +45,15 @@
       "tooltip": "插件 Sounds 文件夹中的 MP3。点击名称可试听。",
       "open_folder": "打开音效文件夹 —— 把 MP3 放进去即可添加自定义提示音。"
     },
+    "start_mode_after_hunt": {
+      "label": "结束后开始",
+      "tooltip": "寻宝或胡萝卜狩猎自然结束后（若开启返回则在返回后）开始所选模式。\n无：不做任何事。\n仅对手动开始的寻宝生效——违规模式、刷怪、魔锅与宝箱调用的寻宝不会触发。手动停止寻宝也不会触发。",
+      "options": {
+        "none": "无",
+        "illegal_mode": "违规模式",
+        "mob_farmer": "刷怪模式"
+      }
+    },
     "cast_treasure_sight_during_hunt": {
       "label": "寻宝途中使用魔寻宝",
       "tooltip": "开：寻宝开始时与下方间隔施放。魔寻宝显示已无剩余则提前结束。\n关：寻宝途中不施放魔寻宝。"

@@ -178,6 +178,24 @@ public class AutomationModeGuard
         }
     }
 
+    public void StartModeAfterHunt(HuntEndStartMode mode)
+    {
+        if (stopping)
+        {
+            return;
+        }
+
+        switch (mode)
+        {
+            case HuntEndStartMode.IllegalMode when !Automator.IsIllegalMode:
+                Automator.Toggle();
+                break;
+            case HuntEndStartMode.MobFarmer when !Farmer.Running:
+                Farmer.Toggle();
+                break;
+        }
+    }
+
     public void NotifyShoppingEnded()
     {
         if (stopping)

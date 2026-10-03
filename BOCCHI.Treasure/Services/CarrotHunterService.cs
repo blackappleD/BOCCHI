@@ -310,8 +310,7 @@ public sealed class CarrotHunterService
             return;
         }
 
-        BocchiChat.Print(chat, uiConfig, FinishedRouteMessage);
-        Teardown();
+        FinishRoute();
     }
 
     private bool TryRestartLoop()
@@ -442,8 +441,7 @@ public sealed class CarrotHunterService
                 ClearHop();
                 if (returnThenStop)
                 {
-                    BocchiChat.Print(chat, uiConfig, FinishedRouteMessage);
-                    Teardown();
+                    FinishRoute();
                     return;
                 }
 
@@ -459,8 +457,7 @@ public sealed class CarrotHunterService
         vnav.Stop();
         if (returnThenStop)
         {
-            BocchiChat.Print(chat, uiConfig, FinishedRouteMessage);
-            Teardown();
+            FinishRoute();
             return;
         }
 
@@ -1964,6 +1961,17 @@ public sealed class CarrotHunterService
         log.Information("Left Occult Crescent — stopping carrot hunt");
         Teardown();
         BocchiChat.Print(chat, uiConfig, translator.T(".treasure.carrot_hunt_off_left_zone"));
+    }
+
+    private void FinishRoute()
+    {
+        BocchiChat.Print(chat, uiConfig, FinishedRouteMessage);
+        Teardown();
+        if (treasureConfig.StartModeAfterHunt != HuntEndStartMode.None)
+        {
+            log.Information("Carrot hunt finished — starting {Mode}", treasureConfig.StartModeAfterHunt);
+            modeGuard.StartModeAfterHunt(treasureConfig.StartModeAfterHunt);
+        }
     }
 
     private void Teardown()

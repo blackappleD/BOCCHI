@@ -45,6 +45,15 @@
       "tooltip": "MP3 from the plugin Sounds folder. Click a name to preview.",
       "open_folder": "Open sound folder — drop MP3s here to add your own."
     },
+    "start_mode_after_hunt": {
+      "label": "Start after hunt",
+      "tooltip": "When Treasure Hunt or Carrot Hunt finishes on its own (after Return, if enabled), start this mode.\nNone: do nothing.\nOnly for hunts you started yourself — not hunts run by Illegal Mode, Mob Farmer, or Pots & Treasure. Stopping the hunt by hand does not trigger it.",
+      "options": {
+        "none": "None",
+        "illegal_mode": "Illegal Mode",
+        "mob_farmer": "Mob Farmer"
+      }
+    },
     "cast_treasure_sight_during_hunt": {
       "label": "Cast Treasure Sight during hunt",
       "tooltip": "On: cast at hunt start and on the interval below. Stops early if Sight says nothing is left.\nOff: do not cast Sight during the hunt."

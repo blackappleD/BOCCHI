@@ -2968,9 +2968,15 @@ public class TreasureHunterService
 
     private void CompleteHunt()
     {
+        bool standalone = !ManagedByPotsTreasure && !ManagedByIllegalModeFiller && !ManagedByMobFarmer;
         CaptureCompletedRun();
         PlayHuntCompleteSound();
         Teardown();
+        if (standalone && config.StartModeAfterHunt != HuntEndStartMode.None)
+        {
+            log.Info("Treasure hunt finished — starting {Mode}", config.StartModeAfterHunt);
+            modeGuard.StartModeAfterHunt(config.StartModeAfterHunt);
+        }
     }
 
     private void CaptureCompletedRun()
