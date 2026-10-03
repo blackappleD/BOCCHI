@@ -3,7 +3,8 @@
   "tooltip": "Forked Tower helpers. Trap spots are South Horn only.",
   "sections": {
     "helpers": "Helpers",
-    "illegal_mode": "Illegal Mode"
+    "illegal_mode": "Illegal Mode",
+    "diagnostics": "Diagnostics"
   },
   "fields": {
     "draw_potential_trap_positions": {
@@ -24,6 +25,26 @@
     "fight_inside_tower": {
       "label": "Fight inside the tower like a CE",
       "tooltip": "When Illegal Mode is on inside the Forked Tower, keep it on and treat the tower as one long CE: BOCCHI's BossMod CE preset handles targeting and dodging and your combat rotation keeps running. Travel, Return, buff refreshes and phantom job swaps are paused, and raises are still accepted. Normal farming resumes once you leave the tower. Off: Illegal Mode turns off when you enter."
+    },
+    "navigate_inside_tower": {
+      "label": "Walk with the group inside the tower",
+      "tooltip": "Illegal Mode only, out of combat: follow your party members, or the largest group of other players if you have no party, and use the teleport sigils they took. Never uses the exit to base camp. In combat, BossMod moves you as usual. Test feature."
+    },
+    "follow_start_distance": {
+      "label": "Start following when the group is farther than (yalms)",
+      "tooltip": "Out of combat, start walking toward the group once it is farther away than this."
+    },
+    "follow_stop_distance": {
+      "label": "Stop following within (yalms)",
+      "tooltip": "Stop walking once the group is this close. Kept below the start distance, so you don't keep starting and stopping."
+    },
+    "open_coffers_inside_tower": {
+      "label": "Open coffers inside the tower",
+      "tooltip": "Illegal Mode only, out of combat: walk to unopened coffers nearby (silver first) and open them. Coffers in the tower are personal loot. Hidden bronze coffers are only opened once something has revealed them."
+    },
+    "record_tower_mechanics": {
+      "label": "Record tower mechanics to a file",
+      "tooltip": "While you are inside the Forked Tower, write enemy actions, map effects, VFX and HP losses to a file in the plugin config folder (forked_tower_records). Used to work out the laser timing; turn it off if the files get too large."
     }
   }
 }

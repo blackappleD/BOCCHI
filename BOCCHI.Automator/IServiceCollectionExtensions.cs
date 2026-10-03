@@ -43,6 +43,8 @@ public static class IServiceCollectionExtensions
         services.AddSingleton<IForkedTowerRegistration, ForkedTowerRegistration>();
         services.AddSingleton<AutoRotationController>();
         services.AddSingleton<RaiseAcceptor>();
+        services.AddSingleton<ForkedTowerNavigator>();
+        services.AddSingleton<ForkedTowerRecorder>();
 
         services.AddSingleton<IPathCalculator, PathCalculator>();
         services.AddSingleton<IPathStepExecutor, PathStepExecutor>();
