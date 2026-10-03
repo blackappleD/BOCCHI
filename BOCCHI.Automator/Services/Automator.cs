@@ -50,6 +50,7 @@ public class Automator
     UIConfig uiConfig,
     AutoRotationController autoRotation,
     RaiseAcceptor raise,
+    ForkedTowerNavigator towerNavigator,
     IAutomationModeGuard modeGuard,
     Func<ITreasureHunter> hunterFactory,
     PotChestLocationSyncService potChests,
@@ -525,6 +526,7 @@ public class Automator
             {
                 deadInTower = true;
                 raise.Reset();
+                towerNavigator.Stop();
             }
 
             raise.Tick();
@@ -545,6 +547,15 @@ public class Automator
         }
 
         autoRotation.TickForForkedTower(reassert);
+        if (insideTower)
+        {
+            towerNavigator.Tick();
+        }
+        else
+        {
+            towerNavigator.Stop();
+        }
+
         return true;
     }
 
@@ -572,6 +583,7 @@ public class Automator
 
     private void ResetWork()
     {
+        towerNavigator.Stop();
         SuspendedForTreasure = false;
         SuspendedForShopping = false;
         memory.Wipe();
