@@ -1,3 +1,4 @@
+using BOCCHI.Common.Data.Zones;
 using Ocelot.Config;
 using Ocelot.Config.Fields;
 using Ocelot.Config.Renderers.Enum;
@@ -94,6 +95,11 @@ public class UIConfig : IAutoConfig
 
     [Checkbox(Order = 17, Section = "chat")]
     public bool ShowBocchiChatPrefix { get; set; } = true;
+
+    // Drawn by the main window's out-of-zone screen, not the config window.
+    public bool AutoEnterAfterTimeout { get; set; } = false;
+
+    public ZoneId AutoEnterZone { get; set; } = ZoneId.SouthHorn;
 
     public bool AnyEventDropsEnabled => ShowDemiatmaDrops || ShowNoteDrops || ShowSoulShardDrops;
 }

@@ -1,10 +1,13 @@
 using BOCCHI.Common;
+using BOCCHI.Common.Config;
 using BOCCHI.Common.Data.Zones;
 using BOCCHI.Common.UI;
+using BOCCHI.Services.OccultAutoEntry;
 using BOCCHI.UI;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 using Microsoft.Extensions.DependencyInjection;
+using Ocelot.Config;
 using Ocelot.Services.Translation;
 using Ocelot.Services.WindowManager;
 using Ocelot.Windows;
@@ -17,6 +20,9 @@ public class MainRenderer
     IServiceProvider services,
     IZoneProvider zones,
     OperationalStatusBar statusBar,
+    OccultAutoEntryService autoEntry,
+    UIConfig uiConfig,
+    IConfigSaver saver,
     ITranslator<MainWindow> translator
 ) : IMainRenderer
 {
@@ -35,6 +41,7 @@ public class MainRenderer
         if (!zones.GetZone().IsOccultCrescentZone())
         {
             BocchiUi.DrawStatusChip(translator.T(".unsupported_zone"), BocchiUi.StatusChipKind.Warn);
+            RenderAutoEntry();
             return;
         }
 
@@ -148,6 +155,75 @@ public class MainRenderer
 
             ImGui.Unindent();
         }
+    }
+
+    private void RenderAutoEntry()
+    {
+        ImGui.Spacing();
+        if (!BocchiUi.BeginPanel("auto_entry"))
+        {
+            return;
+        }
+
+        bool enabled = uiConfig.AutoEnterAfterTimeout;
+        if (ImGui.Checkbox(translator.T(".auto_entry.enable"), ref enabled))
+        {
+            uiConfig.AutoEnterAfterTimeout = enabled;
+            saver.Save();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(translator.T(".auto_entry.enable_tooltip"));
+        }
+
+        using (ImRaii.Disabled(!enabled))
+        {
+            ImGui.Indent();
+            if (ImGui.RadioButton(translator.T(".pot_timer.south_horn"), uiConfig.AutoEnterZone == ZoneId.SouthHorn))
+            {
+                uiConfig.AutoEnterZone = ZoneId.SouthHorn;
+                saver.Save();
+            }
+
+            ImGui.SameLine();
+            if (ImGui.RadioButton(translator.T(".pot_timer.north_horn"), uiConfig.AutoEnterZone == ZoneId.NorthHorn))
+            {
+                uiConfig.AutoEnterZone = ZoneId.NorthHorn;
+                saver.Save();
+            }
+
+            ImGui.Unindent();
+        }
+
+        if (autoEntry.State == OccultAutoEntryState.Idle)
+        {
+            using (ImRaii.Disabled(!autoEntry.CanEnterNow))
+            {
+                if (ImGui.Button(translator.T(".auto_entry.enter_now")))
+                {
+                    autoEntry.EnterNow();
+                }
+            }
+
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            {
+                ImGui.SetTooltip(translator.T(".auto_entry.enter_now_tooltip"));
+            }
+        }
+        else
+        {
+            BocchiUi.MutedText(translator.T(autoEntry.State == OccultAutoEntryState.Running
+                ? ".auto_entry.running"
+                : ".auto_entry.waiting"));
+            ImGui.SameLine();
+            if (ImGui.Button(translator.T(".auto_entry.cancel")))
+            {
+                autoEntry.Cancel();
+            }
+        }
+
+        BocchiUi.EndPanel();
     }
 
     private string GetSectionTitle(MainWindowSection section) =>

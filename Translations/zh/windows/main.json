@@ -1,6 +1,15 @@
 {
   "title": "BOCCHI",
   "unsupported_zone": "请前往新月岛（新月岛南部或北部）以使用 BOCCHI。",
+  "auto_entry": {
+    "enable": "自动模式：任务时间到被传出后自动重新进入",
+    "enable_tooltip": "勾选后，新月岛任务时间结束、被传送回幻境村时，会自动走到杰弗瑞处并进入下方选择的岛。\n手动退出（时间未用完）不会触发。",
+    "enter_now": "立即进入",
+    "enter_now_tooltip": "在幻境村时，立即前往杰弗瑞并进入所选的岛。",
+    "running": "自动进入中……",
+    "waiting": "等待回到幻境村……",
+    "cancel": "取消"
+  },
   "support": {
     "kofi_tooltip": "♥ Ko-fi（这样你就能继续出门晒太阳了）"
   },

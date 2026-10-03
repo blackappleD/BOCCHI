@@ -21,6 +21,7 @@ using BOCCHI.MobFarmer;
 using BOCCHI.Renderers;
 using BOCCHI.Services;
 using BOCCHI.Services.Changelog;
+using BOCCHI.Services.OccultAutoEntry;
 using BOCCHI.Services.Repair;
 using BOCCHI.Services.Shopping;
 using BOCCHI.Services.Shopping.Backends;
@@ -84,6 +85,7 @@ public sealed class Plugin(IDalamudPluginInterface plugin, IPluginLog logger) : 
         services.AddSingleton<IAutomationModeGuard, AutomationModeGuard>();
         services.AddSingleton<OperationalStatusBar>();
         services.AddSingleton<OccultCrescentWindowAutoOpener>();
+        services.AddSingleton<OccultAutoEntryService>();
         services.AddSingleton<CombatPathfindCancelService>();
         services.AddSingleton<IMainWindowTitleBarContributor, IllegalModeTitleBarContributor>();
         services.AddSingleton<IMainWindowTitleBarContributor, LogsTitleBarContributor>();
