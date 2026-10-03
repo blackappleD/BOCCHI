@@ -41,6 +41,7 @@ public static class IServiceCollectionExtensions
         services.AddSingleton<IStartableCriticalEncounterFinder, StartableCriticalEncounterFinder>();
         services.AddSingleton<IForkedTowerRegistration, ForkedTowerRegistration>();
         services.AddSingleton<AutoRotationController>();
+        services.AddSingleton<RaiseAcceptor>();
 
         services.AddSingleton<IPathCalculator, PathCalculator>();
         services.AddSingleton<IPathStepExecutor, PathStepExecutor>();

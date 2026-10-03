@@ -141,6 +141,8 @@
       "illegal_mode_off": "[BOCCHI] 不正モード オフ",
       "illegal_mode_off_left_zone": "[BOCCHI] オカルトクレセントを離れたため不正モード オフ",
       "illegal_mode_off_forked_tower": "[BOCCHI] フォークタワーに入場 — 不正モード オフ",
+      "forked_tower_combat_on": "[BOCCHI] フォークタワーに入場 — CE として戦闘",
+      "forked_tower_combat_off": "[BOCCHI] フォークタワーを退出 — 不正モード再開",
       "forked_tower_offer_ciphers": "[BOCCHI] フォークタワーの入場地点に到着 — 近くの装置で受付用アイテム（Sanguine Cipher）を奉納して受付してください。転送されるまで地点から離れないでください。",
       "forked_tower_on_pad": "[BOCCHI] フォークタワーの入場地点に到着 — 転送されるまで地点から離れないでください。",
       "pathfinding_refreshed": "[BOCCHI] ルートを作り直しました",

@@ -141,6 +141,8 @@
       "illegal_mode_off": "[BOCCHI] Illegal Mode Off",
       "illegal_mode_off_left_zone": "[BOCCHI] Left Occult Crescent — Illegal Mode Off",
       "illegal_mode_off_forked_tower": "[BOCCHI] Entered the Forked Tower — Illegal Mode Off",
+      "forked_tower_combat_on": "[BOCCHI] Inside the Forked Tower — fighting it like a CE",
+      "forked_tower_combat_off": "[BOCCHI] Left the Forked Tower — Illegal Mode resumes",
       "forked_tower_offer_ciphers": "[BOCCHI] On the Forked Tower pad — offer Sanguine Ciphers at a cipher reliquary to register. Stay on the pad until you are teleported.",
       "forked_tower_on_pad": "[BOCCHI] On the Forked Tower pad — stay here until you are teleported.",
       "pathfinding_refreshed": "[BOCCHI] Route replanned",

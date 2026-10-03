@@ -49,6 +49,7 @@ public class Automator
     IForkedTowerRegistration forkedTower,
     UIConfig uiConfig,
     AutoRotationController autoRotation,
+    RaiseAcceptor raise,
     IAutomationModeGuard modeGuard,
     Func<ITreasureHunter> hunterFactory,
     PotChestLocationSyncService potChests,
@@ -82,6 +83,21 @@ public class Automator
     private AutomatorState? lastLoggedState;
 
     private bool wasInsideForkedTower;
+
+    private bool fightingInTower;
+
+    public bool FightingInForkedTower => fightingInTower;
+
+    private DateTime towerLeftAt = DateTime.MaxValue;
+
+    private DateTime towerReassertAt = DateTime.MinValue;
+
+    private bool deadInTower;
+
+    // Zone loads inside the tower can briefly read as outside; only a sustained exit ends tower combat.
+    private static readonly TimeSpan TowerExitGrace = TimeSpan.FromSeconds(5);
+
+    private static readonly TimeSpan TowerReassertInterval = TimeSpan.FromSeconds(3);
 
     public void OnStop() => StopAutomation();
 
@@ -205,6 +221,7 @@ public class Automator
 
     private void ApplyRunModeSideEffects(bool turningOn)
     {
+        fightingInTower = false;
         if (!turningOn)
         {
             SuspendedForTreasure = false;
@@ -339,10 +356,20 @@ public class Automator
             return;
         }
 
-        if (justEnteredTower && forkedTowerConfig.AutoRegisterInIllegalMode && context.IsIllegalMode)
+        if (context.IsIllegalMode && (insideTower || fightingInTower))
         {
-            DisableDueToEnteringForkedTower();
-            return;
+            if (forkedTowerConfig.FightInsideTower)
+            {
+                if (UpdateTowerCombat(insideTower))
+                {
+                    return;
+                }
+            }
+            else if (fightingInTower || (justEnteredTower && forkedTowerConfig.AutoRegisterInIllegalMode))
+            {
+                DisableDueToEnteringForkedTower();
+                return;
+            }
         }
 
         if (SuspendedForShopping)
@@ -466,7 +493,84 @@ public class Automator
         ApplyRunModeSideEffects(turningOn: false);
     }
 
-    private void StopAutomation()
+    /// <returns>False once the player has left the tower and Illegal Mode should run normally.</returns>
+    private bool UpdateTowerCombat(bool insideTower)
+    {
+        DateTime now = DateTime.UtcNow;
+        if (!fightingInTower)
+        {
+            StartTowerCombat(now);
+        }
+
+        if (insideTower)
+        {
+            towerLeftAt = DateTime.MaxValue;
+        }
+        else if (towerLeftAt == DateTime.MaxValue)
+        {
+            towerLeftAt = now;
+        }
+
+        if (now - towerLeftAt >= TowerExitGrace)
+        {
+            EndTowerCombat();
+            return false;
+        }
+
+        // The state machine stays parked: its states would travel, Return or swap phantom jobs,
+        // all of which throw the player out of the tower. Only raises are handled here.
+        if (objects.LocalPlayer is { IsDead: true })
+        {
+            if (!deadInTower)
+            {
+                deadInTower = true;
+                raise.Reset();
+            }
+
+            raise.Tick();
+            return true;
+        }
+
+        bool reassert = now >= towerReassertAt;
+        if (deadInTower)
+        {
+            deadInTower = false;
+            autoRotation.OnRevived();
+            reassert = true;
+        }
+
+        if (reassert)
+        {
+            towerReassertAt = now + TowerReassertInterval;
+        }
+
+        autoRotation.TickForForkedTower(reassert);
+        return true;
+    }
+
+    private void StartTowerCombat(DateTime now)
+    {
+        logger.Info("Inside the Forked Tower — fighting it like a CE until the tower ends");
+        BocchiChat.Print(chat, uiConfig, translator.T(".automation.automator.forked_tower_combat_on"));
+        ResetWork();
+        autoRotation.EnableForForkedTower();
+        fightingInTower = true;
+        deadInTower = false;
+        towerLeftAt = DateTime.MaxValue;
+        towerReassertAt = now + TowerReassertInterval;
+    }
+
+    private void EndTowerCombat()
+    {
+        logger.Info("Left the Forked Tower — Illegal Mode resumes");
+        BocchiChat.Print(chat, uiConfig, translator.T(".automation.automator.forked_tower_combat_off"));
+        fightingInTower = false;
+        towerLeftAt = DateTime.MaxValue;
+        ResetWork();
+        autoRotation.DisableAi();
+    }
+
+    private void ResetWork()
     {
         SuspendedForTreasure = false;
         SuspendedForShopping = false;
@@ -475,14 +579,19 @@ public class Automator
         AethernetTeleport.AbortIfBusy(lifestream);
         pathfinder.Stop();
         vnav.Stop();
-        autoRotation.TeardownForIllegalMode();
-
         if (stateMachine != null)
         {
             StateMachine.Reset();
         }
 
         lastLoggedState = null;
+    }
+
+    private void StopAutomation()
+    {
+        fightingInTower = false;
+        ResetWork();
+        autoRotation.TeardownForIllegalMode();
     }
 
     private void TryStartPendingPotChestFarm()
