@@ -47,10 +47,6 @@ public sealed unsafe class ForkedTowerNavigator(
         2015202, 2015203, 2015216, 2015217, 2015218, 2015222, 2015223, 2015224, 2015225, 2015226,
     ];
 
-    private const float FollowStartDistance = 8f;
-
-    private const float FollowStopDistance = 4f;
-
     private const float CrowdRadius = 20f;
 
     private const int MinCrowdSize = 3;
@@ -336,10 +332,13 @@ public sealed unsafe class ForkedTowerNavigator(
             return;
         }
 
+        // Stop stays below start so we don't flip between walking and standing.
+        float startDistance = config.FollowStartDistance;
+        float stopDistance = MathF.Min(config.FollowStopDistance, startDistance - 1f);
         float distance = Vector3.Distance(me.Position, target);
         if (activity != Activity.Follow)
         {
-            if (distance <= FollowStartDistance)
+            if (distance <= startDistance)
             {
                 return;
             }
@@ -348,13 +347,13 @@ public sealed unsafe class ForkedTowerNavigator(
             logger.Info("[TowerNav] Following {Source} ({Size} players) at {Anchor}, {Distance:F1}y away", source, size, Format(target), distance);
         }
 
-        if (distance <= FollowStopDistance)
+        if (distance <= stopDistance)
         {
             StopMovement();
             return;
         }
 
-        MoveTo(me, target, FollowStopDistance - 1f, now);
+        MoveTo(me, target, MathF.Max(stopDistance - 1f, 0.5f), now);
     }
 
     /// <summary>The player nearest the middle of the biggest cluster — party members first, then everyone.</summary>
