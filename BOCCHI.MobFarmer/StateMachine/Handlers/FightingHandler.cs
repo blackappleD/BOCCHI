@@ -122,7 +122,8 @@ public class FightingHandler
                 farmer.StartingPoint,
                 movementConfig.ShouldAutoMount,
                 movementConfig.PreferredMountId,
-                zones.GetZone().IsInBasecamp());
+                zones.GetZone().IsInBasecamp(),
+                zones.GetZone());
 
             return homeDistance <= HomeArriveRange ? FarmerPhase.Waiting : null;
         }

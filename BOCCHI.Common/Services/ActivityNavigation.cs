@@ -48,7 +48,24 @@ public class ActivityNavigation
 
     private int navigationGeneration;
 
+    // Generation whose request is still routing or whose chain is still running; -1 when idle.
+    private int trackedGeneration = -1;
+
+    // Last generation that actually handed a chain to the manager.
+    private int managedGeneration = -1;
+
     public bool CanPathfind => vnav.IsNavmeshReady();
+
+    public bool IsNavigating
+    {
+        get
+        {
+            int tracked = Volatile.Read(ref trackedGeneration);
+            return tracked >= 0 && tracked == Volatile.Read(ref navigationGeneration);
+        }
+    }
+
+    public void Cancel() => CancelActivityChains();
 
     public bool CanTeleport(Vector3 destination, out string? disabledReason)
     {
@@ -147,7 +164,7 @@ public class ActivityNavigation
 
         logger.Debug("Pathfinding to {Name} at {Destination:f1}", name, approach);
         CancelActivityChains();
-        _ = manager.Manage(BuildPathChain($"{ChainPrefix}Path::{id}", () => approach, treatAsActivity: true));
+        Track(manager.Manage(BuildPathChain($"{ChainPrefix}Path::{id}", () => approach, treatAsActivity: true)));
     }
 
     private async Task PathToSurveyAsync(Vector3 destination, string name, string id, int generation)
@@ -250,6 +267,10 @@ public class ActivityNavigation
         {
             logger.Error(ex, "Failed survey path toward {Name}", name);
         }
+        finally
+        {
+            EndUntrackedRequest(generation);
+        }
     }
 
     private bool CanOfferSurveyReturn()
@@ -282,7 +303,7 @@ public class ActivityNavigation
         if (route == SurveyRoute.Direct)
         {
             logger.Debug("Pathfinding directly to survey {Name} at {Destination:f1}", name, approach);
-            _ = manager.Manage(BuildPathChain(chainName, walkTo, treatAsActivity: false));
+            Track(manager.Manage(BuildPathChain(chainName, walkTo, treatAsActivity: false)));
             return;
         }
 
@@ -401,6 +422,10 @@ public class ActivityNavigation
         {
             logger.Error(ex, "Failed path via aethernet toward {Name}", name);
         }
+        finally
+        {
+            EndUntrackedRequest(generation);
+        }
     }
 
     private async Task TeleportOnlyAsync(Vector3 destination, string name, string id, int generation)
@@ -451,12 +476,16 @@ public class ActivityNavigation
                     logger,
                     target.Id);
 
-                _ = manager.Manage(chain);
+                Track(manager.Manage(chain));
             }).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             logger.Error(ex, "Failed teleport toward {Name}", name);
+        }
+        finally
+        {
+            EndUntrackedRequest(generation);
         }
     }
 
@@ -477,7 +506,7 @@ public class ActivityNavigation
                 logger.Debug("Already at best aethernet — vnav to {Name}", name);
             }
 
-            _ = manager.Manage(AppendPath(chain, chainName, walkTo, treatAsActivity));
+            Track(manager.Manage(AppendPath(chain, chainName, walkTo, treatAsActivity)));
             return;
         }
 
@@ -496,7 +525,7 @@ public class ActivityNavigation
             logger,
             target.Id);
 
-        _ = manager.Manage(AppendPath(chain, chainName, walkTo, treatAsActivity));
+        Track(manager.Manage(AppendPath(chain, chainName, walkTo, treatAsActivity)));
     }
 
     private IChain BuildPathChain(string name, Func<Vector3> destination, bool treatAsActivity = true) =>
@@ -674,9 +703,29 @@ public class ActivityNavigation
     private int BeginNavigation()
     {
         int generation = Interlocked.Increment(ref navigationGeneration);
+        Volatile.Write(ref trackedGeneration, generation);
         manager.CancelWhere(name => name.StartsWith(ChainPrefix, StringComparison.Ordinal));
         AethernetTeleport.AbortIfBusy(lifestream);
         return generation;
+    }
+
+    private void Track(Task<ChainResult> chain)
+    {
+        int generation = Volatile.Read(ref navigationGeneration);
+        Volatile.Write(ref trackedGeneration, generation);
+        Volatile.Write(ref managedGeneration, generation);
+        _ = chain.ContinueWith(
+            _ => Interlocked.CompareExchange(ref trackedGeneration, -1, generation),
+            TaskScheduler.Default);
+    }
+
+    // Async routing finished without starting a chain (no route, already there, error).
+    private void EndUntrackedRequest(int generation)
+    {
+        if (Volatile.Read(ref managedGeneration) != generation)
+        {
+            Interlocked.CompareExchange(ref trackedGeneration, -1, generation);
+        }
     }
 
     private void CancelActivityChains()

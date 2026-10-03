@@ -30,7 +30,8 @@ public class MobFarmerService
     ITranslator<MainWindow> translator,
     IAutomationModeGuard modeGuard,
     IFarmerCombatController combat,
-    FarmerSpotSession spots
+    FarmerSpotSession spots,
+    FarmerTravel travel
 ) : IMobFarmer, IOnUpdate, IOnStop
 {
     public int Order => 10;
@@ -131,6 +132,7 @@ public class MobFarmerService
 
         Suspended = suspended;
         YieldReason = suspended ? reason : FarmerYieldReason.None;
+        travel.Cancel();
         pathfinder.Stop();
         combat.Disable();
 
@@ -200,6 +202,7 @@ public class MobFarmerService
         Suspended = false;
         YieldReason = FarmerYieldReason.None;
         spots.Reset();
+        travel.Cancel();
         combat.Disable();
         combat.Teardown();
         if (StateMachine is FlowStateMachine<FarmerPhase> flowOff)
