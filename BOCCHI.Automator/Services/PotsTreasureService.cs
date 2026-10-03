@@ -211,9 +211,11 @@ public class PotsTreasureService
             return;
         }
 
+        // Shopping drives vnav itself (GBR / Knightshopper); stopping pathfinding every frame here
+        // cancels the vendor walk. Movement was already stopped once on the suspend transition.
         if (automator.SuspendedForShopping)
         {
-            SoftPauseMovement();
+            HoldHunt();
             return;
         }
 
@@ -223,9 +225,10 @@ public class PotsTreasureService
             CaptureFinishedTreasureHunt();
         }
 
+        // Pause() already stopped movement; keep vnav free for the player while paused.
         if (Paused)
         {
-            SoftPauseMovement();
+            HoldHunt();
             return;
         }
 
@@ -249,6 +252,14 @@ public class PotsTreasureService
         else
         {
             EnterHuntPhase();
+        }
+    }
+
+    private void HoldHunt()
+    {
+        if (hunter.Running && !hunter.Paused)
+        {
+            hunter.Pause();
         }
     }
 
