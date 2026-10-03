@@ -179,6 +179,10 @@
       "label": "Auto treasure hunt in Illegal Mode",
       "tooltip": "On: after a FATE or CE, return to camp and run Treasure Sight if known. Starts a hunt when bronze/silver remaining meets the % on Treasure Hunter.\nAlso casts Sight at camp while waiting (Interval below), then hunts if enough chests remain — so you are not sitting idle between CEs.\nWithout Sight: uses the built-in chest list (those % ignored), always pauses for FATE/CE, then resumes.\nOff: do not start treasure hunts from Illegal Mode."
     },
+    "auto_treasure_hunt_on_the_way": {
+      "label": "On the way",
+      "tooltip": "Only open coffers within range of the line while traveling."
+    },
     "pause_auto_treasure_hunt_for_fate": {
       "label": "Pause auto treasure hunt for FATEs",
       "tooltip": "On: while Auto treasure hunt is running, pause when a FATE is available (or already in one), then resume nearby afterward.\nOff: with Treasure Sight, keep hunting through FATEs (a hunt using the default chest list always pauses for FATEs).\nNeeds Auto treasure hunt in Illegal Mode."

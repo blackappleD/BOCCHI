@@ -96,55 +96,74 @@ public class AutomatorConfig : IAutoConfig
     [Checkbox(Order = 13, Section = "treasure")]
     public bool EnableAutomaticTreasureHuntDuringIllegalMode { get; set; } = false;
 
+    /// <summary>
+    ///     Only open coffers that sit along the line of the current travel leg (player → FATE/CE /
+    ///     aethernet). No post-activity Treasure Sight survey and no full hunt route.
+    /// </summary>
     [Checkbox(
         Order = 14,
         Indent = 1,
         Requires = nameof(EnableAutomaticTreasureHuntDuringIllegalMode),
         Section = "treasure")]
-    public bool PauseAutoTreasureHuntForFate { get; set; } = false;
+    public bool AutoTreasureHuntOnTheWay { get; set; } = false;
+
+    /// <summary>Automatic treasure hunt with the full route (not the on-the-way-only variant).</summary>
+    public bool UsesFullAutoTreasureHunt =>
+        EnableAutomaticTreasureHuntDuringIllegalMode && !AutoTreasureHuntOnTheWay;
+
+    /// <summary>Illegal Mode opens coffers along the travel line instead of running a hunt.</summary>
+    public bool UsesOnTheWayTreasureHunt =>
+        EnableAutomaticTreasureHuntDuringIllegalMode && AutoTreasureHuntOnTheWay;
 
     [Checkbox(
         Order = 15,
         Indent = 1,
-        Requires = nameof(EnableAutomaticTreasureHuntDuringIllegalMode),
+        Requires = nameof(UsesFullAutoTreasureHunt),
         Section = "treasure")]
-    public bool PauseAutoTreasureHuntForPots { get; set; } = true;
+    public bool PauseAutoTreasureHuntForFate { get; set; } = false;
 
     [Checkbox(
         Order = 16,
         Indent = 1,
-        Requires = nameof(EnableAutomaticTreasureHuntDuringIllegalMode),
+        Requires = nameof(UsesFullAutoTreasureHunt),
         Section = "treasure")]
-    public bool PauseAutoTreasureHuntForCriticalEncounter { get; set; } = false;
+    public bool PauseAutoTreasureHuntForPots { get; set; } = true;
 
     [Checkbox(
         Order = 17,
         Indent = 1,
-        DisabledWhen = nameof(EnableAutomaticTreasureHuntDuringIllegalMode),
+        Requires = nameof(UsesFullAutoTreasureHunt),
+        Section = "treasure")]
+    public bool PauseAutoTreasureHuntForCriticalEncounter { get; set; } = false;
+
+    [Checkbox(
+        Order = 18,
+        Indent = 1,
+        DisabledWhen = nameof(UsesFullAutoTreasureHunt),
         Section = "treasure")]
     public bool ShouldCastTreasureSight { get; set; } = false;
 
     [IntRange(
         60,
         600,
-        Order = 18,
+        Order = 19,
         Indent = 2,
         Requires = nameof(UsesTreasureSightInterval),
         Section = "treasure")]
     public int TreasureSightRecastIntervalSeconds { get; set; } = 120;
 
     public bool UsesTreasureSightInterval =>
-        EnableAutomaticTreasureHuntDuringIllegalMode || ShouldCastTreasureSight;
+        UsesFullAutoTreasureHunt || ShouldCastTreasureSight;
 
-    [IntRange(2, 60, Order = 19, Section = "delays")]
+    [IntRange(2, 60, Order = 20, Section = "delays")]
     public int MaxRemoteIdleTimeSeconds { get; set; } = 10;
 
-    [IntRange(0, 60, Order = 20, Section = "delays")]
+    [IntRange(0, 60, Order = 21, Section = "delays")]
     public int MaxBaseTeleportDelaySeconds { get; set; } = 0;
 
-    [IntRange(1, 99, Order = 21, Section = "repair")]
+    [IntRange(1, 99, Order = 22, Section = "repair")]
     public int AutoRepairThreshold { get; set; } = 30;
 
-    [EnumSelectDisplay<AutoRepairMethod, AutoRepairMethodDisplay>(Order = 22, Section = "repair")]
+    [EnumSelectDisplay<AutoRepairMethod, AutoRepairMethodDisplay>(Order = 23, Section = "repair")]
     public AutoRepairMethod AutoRepairMethod { get; set; } = AutoRepairMethod.SelfRepair;
 }

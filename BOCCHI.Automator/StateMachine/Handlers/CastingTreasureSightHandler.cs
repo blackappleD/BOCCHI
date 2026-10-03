@@ -51,7 +51,7 @@ public class CastingTreasureSightHandler
             return StatePriority.Never;
         }
 
-        if (automatorConfig.EnableAutomaticTreasureHuntDuringIllegalMode
+        if (automatorConfig.UsesFullAutoTreasureHunt
             && memory.TryRemember<AutomaticTreasureSurveyMemory>(out AutomaticTreasureSurveyMemory survey)
             && survey.PendingSurvey
             && !survey.WaitingForSurveyResult)
@@ -117,7 +117,7 @@ public class CastingTreasureSightHandler
                 }
 
                 if (survey.PendingSurvey
-                    || automatorConfig.EnableAutomaticTreasureHuntDuringIllegalMode)
+                    || automatorConfig.UsesFullAutoTreasureHunt)
                 {
                     survey.PendingSurvey = false;
                     survey.WaitingForSurveyResult = true;
@@ -130,7 +130,7 @@ public class CastingTreasureSightHandler
 
     private bool CanCastIdleCampSight()
     {
-        bool autoHunt = automatorConfig.EnableAutomaticTreasureHuntDuringIllegalMode;
+        bool autoHunt = automatorConfig.UsesFullAutoTreasureHunt;
         if (!autoHunt && !automatorConfig.ShouldCastTreasureSight)
         {
             return false;

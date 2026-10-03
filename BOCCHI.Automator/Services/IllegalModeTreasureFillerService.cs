@@ -82,7 +82,7 @@ public class IllegalModeTreasureFillerService
             return;
         }
 
-        if (!automatorConfig.EnableAutomaticTreasureHuntDuringIllegalMode)
+        if (!automatorConfig.UsesFullAutoTreasureHunt)
         {
             ResetSession();
             return;
