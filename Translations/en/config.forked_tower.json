@@ -19,7 +19,11 @@
     },
     "auto_register_in_illegal_mode": {
       "label": "Go to the tower when registration opens",
-      "tooltip": "While Illegal Mode is on and Forked Tower registration opens, drop the current trip, travel to the entry pad and wait on it until you are teleported in. Illegal Mode turns off once you are inside. Magic (North Horn) is skipped below Knowledge Level 40. Blood (South Horn): you still offer Sanguine Ciphers at a reliquary yourself — BOCCHI only reminds you."
+      "tooltip": "While Illegal Mode is on and Forked Tower registration opens, drop the current trip, travel to the entry pad and wait on it until you are teleported in. Inside, see the option below. Magic (North Horn) is skipped below Knowledge Level 40. Blood (South Horn): you still offer Sanguine Ciphers at a reliquary yourself — BOCCHI only reminds you."
+    },
+    "fight_inside_tower": {
+      "label": "Fight inside the tower like a CE",
+      "tooltip": "When Illegal Mode is on inside the Forked Tower, keep it on and treat the tower as one long CE: BOCCHI's BossMod CE preset handles targeting and dodging and your combat rotation keeps running. Travel, Return, buff refreshes and phantom job swaps are paused. Normal farming resumes once you leave the tower. Off: Illegal Mode turns off when you enter."
     }
   }
 }

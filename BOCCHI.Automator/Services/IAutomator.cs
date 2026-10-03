@@ -16,6 +16,9 @@ public interface IAutomator
 
     bool SuspendedForShopping { get; }
 
+    /// <summary>Illegal Mode is inside the Forked Tower and only fighting; nothing else may start.</summary>
+    bool FightingInForkedTower { get; }
+
     bool IsIllegalMode { get; }
 
     void SetSuspendedForTreasure(bool suspended);

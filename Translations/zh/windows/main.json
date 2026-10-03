@@ -141,6 +141,8 @@
       "illegal_mode_off": "[BOCCHI] 违规模式已关闭",
       "illegal_mode_off_left_zone": "[BOCCHI] 已离开神典石 — 违规模式已关闭",
       "illegal_mode_off_forked_tower": "[BOCCHI] 已进入两歧塔 — 违规模式已关闭",
+      "forked_tower_combat_on": "[BOCCHI] 已进入两歧塔 — 按 CE 战斗",
+      "forked_tower_combat_off": "[BOCCHI] 已离开两歧塔 — 违规模式恢复刷怪",
       "forked_tower_offer_ciphers": "[BOCCHI] 已到达两歧塔平台 — 请在传送魔纹启动灯处献上「魔纹启动凭证：力之塔」完成报名，传送前不要离开平台。",
       "forked_tower_on_pad": "[BOCCHI] 已到达两歧塔平台 — 传送前不要离开平台。",
       "pathfinding_refreshed": "[BOCCHI] 已重新规划路线",

@@ -55,6 +55,29 @@ public class AutoRotationController(
 
     public void TeardownForIllegalMode() => session.Teardown();
 
+    // The tower is fought like one long CE: BossMod AI + job rotation, nothing else from Illegal Mode.
+    public void EnableForForkedTower()
+    {
+        logger.Debug("Combat AI Enable for Forked Tower recipe={Recipe}", config.CombatAutorotation);
+        lastEnabledActivity = CombatActivity.CriticalEncounter;
+        lastSyncSkipReason = null;
+        session.Enable(CombatActivity.CriticalEncounter);
+    }
+
+    public void TickForForkedTower(bool reassert)
+    {
+        session.OverwriteBossModPresets = config.UpdateBossModPresetsAutomatically;
+        session.MovementSettings = BossModMovement.From(config, player.IsMelee(), player.GetClassJob()?.RowId);
+
+        // Wrath drops the lease on job change or death without telling us; re-enabling re-arms it.
+        if (reassert)
+        {
+            session.Enable(CombatActivity.CriticalEncounter);
+        }
+
+        session.Tick(CurrentPhantomJobId());
+    }
+
     public void OnRevived()
     {
         session.ClearJobAppliedCache();

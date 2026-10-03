@@ -18,4 +18,7 @@ public class ForkedTowerConfig : IAutoConfig
 
     [Checkbox(Order = 3, Section = "illegal_mode")]
     public bool AutoRegisterInIllegalMode { get; set; } = false;
+
+    [Checkbox(Order = 4, Section = "illegal_mode")]
+    public bool FightInsideTower { get; set; } = true;
 }

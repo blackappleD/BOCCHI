@@ -61,7 +61,7 @@ public class IllegalModeTreasureFillerService
             return;
         }
 
-        if (automator.SuspendedForShopping)
+        if (automator.SuspendedForShopping || automator.FightingInForkedTower)
         {
             return;
         }
