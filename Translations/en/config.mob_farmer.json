@@ -123,6 +123,10 @@
     "use_provoke": {
       "label": "Use Provoke while pulling"
     },
+    "dodge_enemy_aoe": {
+      "label": "Dodge enemy AoE",
+      "tooltip": "Step out of telegraphed enemy casts (circle, cone, line, cross) using the action's own range/width. Pauses the combat rotation for the second it takes to move. BossMod has no modules for Occult Crescent field mobs, so its AI does not dodge them by itself. Shapes are approximate and donuts are not handled."
+    },
     "use_gap_closer": {
       "label": "Use gap closer while pulling"
     },

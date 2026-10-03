@@ -19,6 +19,7 @@ public static class IServiceCollectionExtensions
         services.AddSingleton<FarmerPullAssist>();
         services.AddSingleton<FarmerSpotSession>();
         services.AddSingleton<FarmerTravel>();
+        services.AddSingleton<FarmerAoeDodger>();
         services.AddSingleton<IMobFarmer, MobFarmerService>();
         services.AddSingleton<Func<IMobFarmer>>(sp => () => sp.GetRequiredService<IMobFarmer>());
         services.AddSingleton<IDynamicRenderer, MobFarmerRenderer>();

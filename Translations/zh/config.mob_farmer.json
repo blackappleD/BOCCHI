@@ -123,6 +123,10 @@
     "use_provoke": {
       "label": "拉怪时使用挑衅"
     },
+    "dodge_enemy_aoe": {
+      "label": "躲避敌人 AOE",
+      "tooltip": "根据技能本身的范围/宽度，走出敌人读条的圆形、扇形、直线、十字 AOE。移动的那一两秒会暂停战斗循环。BossMod 没有新月岛野外小怪的模块，AI 自己不会躲。形状为近似值，不处理月环。"
+    },
     "use_gap_closer": {
       "label": "拉怪时使用突进"
     },

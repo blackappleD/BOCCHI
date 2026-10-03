@@ -69,6 +69,10 @@ public class MobFarmerConfig : IAutoConfig
     [Checkbox(Order = 16, Section = "pulls")]
     public bool UseGapCloser { get; set; } = false;
 
+    // Same Order as UseGapCloser: name tie-break puts this right before it.
+    [Checkbox(Order = 16, Section = "pulls")]
+    public bool DodgeEnemyAoe { get; set; } = true;
+
     [Checkbox(Order = 17, Section = "home")]
     public bool ReturnToStartInWaitingPhase { get; set; } = false;
 

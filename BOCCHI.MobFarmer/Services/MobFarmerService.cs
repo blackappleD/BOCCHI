@@ -27,11 +27,13 @@ public class MobFarmerService
     IChatGui chat,
     ICondition conditions,
     UIConfig uiConfig,
+    MobFarmerConfig config,
     ITranslator<MainWindow> translator,
     IAutomationModeGuard modeGuard,
     IFarmerCombatController combat,
     FarmerSpotSession spots,
-    FarmerTravel travel
+    FarmerTravel travel,
+    FarmerAoeDodger dodger
 ) : IMobFarmer, IOnUpdate, IOnStop
 {
     public int Order => 10;
@@ -133,6 +135,7 @@ public class MobFarmerService
         Suspended = suspended;
         YieldReason = suspended ? reason : FarmerYieldReason.None;
         travel.Cancel();
+        dodger.Reset();
         pathfinder.Stop();
         combat.Disable();
 
@@ -182,6 +185,11 @@ public class MobFarmerService
             return;
         }
 
+        if (TickDodge())
+        {
+            return;
+        }
+
         if (Phase == FarmerPhase.Fighting)
         {
             combat.Tick();
@@ -196,6 +204,33 @@ public class MobFarmerService
         StateMachine.Update();
     }
 
+    /// <summary>
+    ///     Steps out of enemy AoE before the phase handler runs. While dodging, the handler is skipped
+    ///     and the combat AI is paused so BossMod doesn't walk us back in.
+    /// </summary>
+    private bool TickDodge()
+    {
+        if (!config.DodgeEnemyAoe
+            || Phase is not (FarmerPhase.Gathering or FarmerPhase.Stacking or FarmerPhase.Fighting))
+        {
+            dodger.Reset();
+            return false;
+        }
+
+        bool wasDodging = dodger.IsDodging;
+        if (!dodger.Tick())
+        {
+            return false;
+        }
+
+        if (!wasDodging)
+        {
+            combat.Disable();
+        }
+
+        return true;
+    }
+
     private void StopInternal()
     {
         Running = false;
@@ -203,6 +238,7 @@ public class MobFarmerService
         YieldReason = FarmerYieldReason.None;
         spots.Reset();
         travel.Cancel();
+        dodger.Reset();
         combat.Disable();
         combat.Teardown();
         if (StateMachine is FlowStateMachine<FarmerPhase> flowOff)
