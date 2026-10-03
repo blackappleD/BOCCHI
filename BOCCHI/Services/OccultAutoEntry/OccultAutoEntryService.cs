@@ -371,6 +371,17 @@ public sealed unsafe class OccultAutoEntryService(
         string wanted = Normalize(ContentName(config.AutoEnterZone));
         var menu = new AddonMaster.SelectString(addon);
 
+        // Jeffroy's "确定要进入“…”吗？ 是/否" confirm is a SelectString too; its prompt carries the name and "yes" is first.
+        if (wanted.Length > 0
+            && menu.EntryCount > 0
+            && Normalize(menu.Text).Contains(wanted, StringComparison.OrdinalIgnoreCase))
+        {
+            logger.Info("[AutoEntry] Confirming entry → {Entry}", menu.Entries[0].Text);
+            menu.Entries[0].Select();
+            menuSeenAt = DateTime.MinValue;
+            return true;
+        }
+
         // "进入“…北征之章”" and "进入“…北征之章（两歧塔 超魔之塔）”" both contain the name; the shortest is the plain island.
         AddonMaster.SelectString.Entry? match = null;
         var matchLength = int.MaxValue;
@@ -399,8 +410,9 @@ public sealed unsafe class OccultAutoEntryService(
         }
 
         logger.Warning(
-            "[AutoEntry] No menu entry for {Wanted}: {Entries}",
+            "[AutoEntry] No menu entry for {Wanted} (prompt \"{Prompt}\"): {Entries}",
             wanted,
+            menu.Text,
             string.Join(" | ", menu.Entries.Select(e => $"{e.Text} [{string.Join(' ', e.Text.Select(c => ((int)c).ToString("X4")))}]")));
         BocchiChat.PrintError(chat, config, $"Auto-entry: \"{wanted}\" is not in Jeffroy's menu. Stopped.");
         addon->FireCallbackInt(-1);
