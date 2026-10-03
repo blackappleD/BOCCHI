@@ -65,6 +65,10 @@ public sealed unsafe class OccultAutoEntryService(
 
     private string startedReason = string.Empty;
 
+    private DateTime menuSeenAt = DateTime.MinValue;
+
+    private static readonly TimeSpan MenuGrace = TimeSpan.FromSeconds(3);
+
     public OccultAutoEntryState State { get; private set; } = OccultAutoEntryState.Idle;
 
     public UpdateLimit UpdateLimit { get; } = new()
@@ -156,6 +160,12 @@ public sealed unsafe class OccultAutoEntryService(
             return;
         }
 
+        // A queue for a full island can be long; only time the walking/talking part.
+        if (condition[ConditionFlag.InDutyQueue])
+        {
+            startedAt = DateTime.UtcNow;
+        }
+
         if (DateTime.UtcNow - startedAt > EntryTimeout)
         {
             BocchiChat.PrintError(chat, config, "Auto-entry gave up after 10 minutes.");
@@ -218,6 +228,7 @@ public sealed unsafe class OccultAutoEntryService(
 
     private void Reset()
     {
+        menuSeenAt = DateTime.MinValue;
         State = OccultAutoEntryState.Idle;
         startedReason = string.Empty;
     }
@@ -301,27 +312,50 @@ public sealed unsafe class OccultAutoEntryService(
             return false;
         }
 
+        if (menuSeenAt == DateTime.MinValue)
+        {
+            menuSeenAt = DateTime.UtcNow;
+        }
+
         if (!EzThrottler.Throttle("AutoEntry::Menu", 750))
         {
             return true;
         }
 
-        string wanted = ContentName(config.AutoEnterZone);
+        string wanted = Normalize(ContentName(config.AutoEnterZone));
         var menu = new AddonMaster.SelectString(addon);
+
+        // "进入“…北征之章”" and "进入“…北征之章（两歧塔 超魔之塔）”" both contain the name; the shortest is the plain island.
+        AddonMaster.SelectString.Entry? match = null;
+        var matchLength = int.MaxValue;
         foreach (AddonMaster.SelectString.Entry entry in menu.Entries)
         {
-            if (wanted.Length > 0 && entry.Text.Contains(wanted, StringComparison.OrdinalIgnoreCase))
+            string text = Normalize(entry.Text);
+            if (wanted.Length > 0 && text.Contains(wanted, StringComparison.OrdinalIgnoreCase) && text.Length < matchLength)
             {
-                logger.Info("[AutoEntry] Menu → {Entry}", entry.Text);
-                entry.Select();
-                return true;
+                match = entry;
+                matchLength = text.Length;
             }
+        }
+
+        if (match is { } chosen)
+        {
+            logger.Info("[AutoEntry] Menu → {Entry}", chosen.Text);
+            chosen.Select();
+            menuSeenAt = DateTime.MinValue;
+            return true;
+        }
+
+        // Entry texts can lag a frame or two behind the addon becoming ready.
+        if (DateTime.UtcNow - menuSeenAt < MenuGrace)
+        {
+            return true;
         }
 
         logger.Warning(
             "[AutoEntry] No menu entry for {Wanted}: {Entries}",
             wanted,
-            string.Join(" | ", menu.Entries.Select(e => e.Text)));
+            string.Join(" | ", menu.Entries.Select(e => $"{e.Text} [{string.Join(' ', e.Text.Select(c => ((int)c).ToString("X4")))}]")));
         BocchiChat.PrintError(chat, config, $"Auto-entry: \"{wanted}\" is not in Jeffroy's menu. Stopped.");
         addon->FireCallbackInt(-1);
         Stop();
@@ -342,8 +376,8 @@ public sealed unsafe class OccultAutoEntryService(
         }
 
         var master = new AddonMaster.SelectYesno((nint)yesno);
-        string wanted = ContentName(config.AutoEnterZone);
-        if (wanted.Length > 0 && master.Text.Contains(wanted, StringComparison.OrdinalIgnoreCase))
+        string wanted = Normalize(ContentName(config.AutoEnterZone));
+        if (wanted.Length > 0 && Normalize(master.Text).Contains(wanted, StringComparison.OrdinalIgnoreCase))
         {
             logger.Info("[AutoEntry] Confirming entry");
             master.Yes();
@@ -382,6 +416,10 @@ public sealed unsafe class OccultAutoEntryService(
 
         return true;
     }
+
+    // The menu SeString doesn't render spaces/quotes the way the sheet stores them, so compare letters and digits only.
+    private static string Normalize(string text) =>
+        new(text.Where(char.IsLetterOrDigit).ToArray());
 
     // Jeffroy's menu reads 进入“<content name>”, and the confirm prompt quotes the same name, in every client language.
     private string ContentName(ZoneId zone)
