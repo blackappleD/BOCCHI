@@ -146,6 +146,7 @@
       "path_map_rebuilding": "[BOCCHI] Rebuilding path map for this zone…",
       "path_map_rebuild_wrong_zone": "[BOCCHI] Rebuild path map only works in Occult Crescent.",
       "details": "Details",
+      "forked_tower_route_saved": "[BOCCHI] Tower route saved: {legs} legs, {points} points ({file})",
       "illegal_mode_on": "[BOCCHI] Illegal Mode On",
       "illegal_mode_off": "[BOCCHI] Illegal Mode Off",
       "illegal_mode_off_left_zone": "[BOCCHI] Left Occult Crescent — Illegal Mode Off",

@@ -42,9 +42,17 @@
       "label": "Open coffers inside the tower",
       "tooltip": "Illegal Mode only, out of combat: walk to unopened coffers nearby (silver first) and open them. Coffers in the tower are personal loot. Hidden bronze coffers are only opened once something has revealed them."
     },
+    "use_tower_route": {
+      "label": "Walk the recorded tower route",
+      "tooltip": "Illegal Mode, out of combat: walk the route through the tower room by room (built-in route, plus any you record) instead of chasing the crowd. Waits for the group when it is behind, follows it when it is ahead, and walks on to the room's pad once the group has gone through. Falls back to following the crowd off the route."
+    },
     "record_tower_mechanics": {
       "label": "Record tower mechanics to a file",
       "tooltip": "While you are inside the Forked Tower, write enemy actions, map effects, VFX and HP losses to a file in the plugin config folder (forked_tower_records). Used to work out the laser timing; turn it off if the files get too large."
+    },
+    "record_tower_route": {
+      "label": "Record my route through the tower",
+      "tooltip": "With Illegal Mode off, the path you walk inside the Forked Tower is recorded room by room and saved to forked_tower_routes in the plugin config folder when you leave the tower. Pause briefly at each pad. Recorded routes are used together with the built-in one."
     }
   }
 }

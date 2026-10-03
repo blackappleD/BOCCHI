@@ -34,6 +34,12 @@ public class ForkedTowerConfig : IAutoConfig
     [Checkbox(Order = 8, Section = "illegal_mode")]
     public bool OpenCoffersInsideTower { get; set; } = true;
 
-    [Checkbox(Order = 9, Section = "diagnostics")]
+    [Checkbox(Order = 9, Section = "illegal_mode")]
+    public bool UseTowerRoute { get; set; } = true;
+
+    [Checkbox(Order = 10, Section = "diagnostics")]
     public bool RecordTowerMechanics { get; set; } = true;
+
+    [Checkbox(Order = 11, Section = "diagnostics")]
+    public bool RecordTowerRoute { get; set; } = false;
 }

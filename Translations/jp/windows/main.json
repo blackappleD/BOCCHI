@@ -146,6 +146,7 @@
       "path_map_rebuilding": "[BOCCHI] このゾーンの経路マップを再構築しています…",
       "path_map_rebuild_wrong_zone": "[BOCCHI] 経路マップの再構築はオカルトクレセント内でのみ使えます。",
       "details": "詳細",
+      "forked_tower_route_saved": "[BOCCHI] 塔内ルートを保存しました：{legs} 区間、{points} 点（{file}）",
       "illegal_mode_on": "[BOCCHI] 不正モード オン",
       "illegal_mode_off": "[BOCCHI] 不正モード オフ",
       "illegal_mode_off_left_zone": "[BOCCHI] オカルトクレセントを離れたため不正モード オフ",

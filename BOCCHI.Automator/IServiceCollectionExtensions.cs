@@ -4,6 +4,7 @@ using BOCCHI.Automator.Services;
 using BOCCHI.Automator.Services.Goals;
 using BOCCHI.Automator.Services.Paths;
 using BOCCHI.Automator.Services.PotTreasure;
+using BOCCHI.Automator.Services.TowerRoutes;
 using BOCCHI.Common;
 using BOCCHI.Common.Data.Goals;
 using BOCCHI.Common.Services;
@@ -45,6 +46,8 @@ public static class IServiceCollectionExtensions
         services.AddSingleton<RaiseAcceptor>();
         services.AddSingleton<ForkedTowerNavigator>();
         services.AddSingleton<ForkedTowerRecorder>();
+        services.AddSingleton<TowerRouteStore>();
+        services.AddSingleton<TowerRouteRecorder>();
 
         services.AddSingleton<IPathCalculator, PathCalculator>();
         services.AddSingleton<IPathStepExecutor, PathStepExecutor>();

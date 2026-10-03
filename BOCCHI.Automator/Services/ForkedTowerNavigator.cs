@@ -1,4 +1,5 @@
 using System.Numerics;
+using BOCCHI.Automator.Services.TowerRoutes;
 using BOCCHI.Common.Config;
 using BOCCHI.Common.Data.Aethernet;
 using BOCCHI.Common.Services;
@@ -22,17 +23,19 @@ using CsGameObject = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
 namespace BOCCHI.Automator.Services;
 
 /// <summary>
-///     Out-of-combat movement inside the Forked Tower: open nearby coffers, walk with the party (or the
-///     biggest group of players), and take the teleport sigil the group just took. In combat it lets
-///     BossMod move.
+///     Out-of-combat movement inside the Forked Tower: open nearby coffers, walk the recorded route with
+///     the party (or the biggest group of players) and take the room's pad once the group has gone through.
+///     Off the route it follows the group directly. In combat it lets BossMod move.
 /// </summary>
 public sealed unsafe class ForkedTowerNavigator(
     IObjectTable objects,
+    IClientState client,
     IPartyList party,
     ICondition conditions,
     IDataManager data,
     IVNavmeshIpc vnav,
     ForkedTowerConfig config,
+    TowerRouteStore routes,
     ILogger<ForkedTowerNavigator> logger
 )
 {
@@ -45,6 +48,7 @@ public sealed unsafe class ForkedTowerNavigator(
         // Magic
         2015189, 2015190, 2015191, 2015193, 2015195, 2015196, 2015197, 2015198, 2015199, 2015200, 2015201,
         2015202, 2015203, 2015216, 2015217, 2015218, 2015222, 2015223, 2015224, 2015225, 2015226,
+        2015420, 2015443,
     ];
 
     private const float CrowdRadius = 20f;
@@ -63,6 +67,32 @@ public sealed unsafe class ForkedTowerNavigator(
 
     private const float TeleportJumpDistance = 30f;
 
+    // Faster than running = a pad is throwing us across the room; don't steer mid-air.
+    private const float LaunchSpeed = 11f;
+
+    // A recorded leg is used when we are this close to it, and kept while within the second distance.
+    private const float RouteJoinDistance = 10f;
+
+    private const float RouteKeepDistance = 15f;
+
+    // Further than this from the line, pathfind back onto it instead of following it.
+    private const float RouteOffDistance = 3f;
+
+    // The group counts as on the leg within this distance of it; off the leg but this close, we follow it directly.
+    private const float CrowdOnRouteDistance = 20f;
+
+    private const float CrowdNearbyDistance = 60f;
+
+    private const float PadNearEndRadius = 5f;
+
+    private static readonly TimeSpan CrowdGoneDelay = TimeSpan.FromSeconds(3);
+
+    private static readonly TimeSpan RouteStuckTime = TimeSpan.FromSeconds(4);
+
+    private static readonly TimeSpan LegEndGiveUp = TimeSpan.FromSeconds(30);
+
+    private static readonly TimeSpan RouteFallback = TimeSpan.FromSeconds(30);
+
     private static readonly TimeSpan DecisionInterval = TimeSpan.FromMilliseconds(250);
 
     private static readonly TimeSpan RepathInterval = TimeSpan.FromSeconds(1);
@@ -79,6 +109,7 @@ public sealed unsafe class ForkedTowerNavigator(
         Coffer,
         Follow,
         Sigil,
+        Route,
     }
 
     private readonly Dictionary<ulong, DateTime> skipUntil = [];
@@ -113,6 +144,32 @@ public sealed unsafe class ForkedTowerNavigator(
 
     private bool warnedVnavMissing;
 
+    private TowerRouteLeg? routeLeg;
+
+    private int routeCursor;
+
+    private float routeIssuedGoal = float.NaN;
+
+    private DateTime routeIssuedAt;
+
+    private Vector3 routeProgressPosition;
+
+    private DateTime routeProgressAt;
+
+    private int routeStuckCount;
+
+    private DateTime routeCrowdGoneSince = DateTime.MaxValue;
+
+    private DateTime routeLegEndSince = DateTime.MaxValue;
+
+    private DateTime routeFallbackUntil;
+
+    private Vector3? speedSamplePosition;
+
+    private DateTime speedSampleAt;
+
+    private DateTime launchedUntil;
+
     public void Tick()
     {
         if (!config.NavigateInsideTower && !config.OpenCoffersInsideTower)
@@ -143,6 +200,26 @@ public sealed unsafe class ForkedTowerNavigator(
             || conditions[ConditionFlag.OccupiedInCutSceneEvent]
             || conditions[ConditionFlag.WatchingCutscene]
             || conditions[ConditionFlag.OccupiedInEvent])
+        {
+            return;
+        }
+
+        if (now - speedSampleAt >= TimeSpan.FromMilliseconds(100))
+        {
+            if (speedSamplePosition is { } sampled)
+            {
+                float moved = Vector3.Distance(sampled, me.Position);
+                if (moved <= TeleportJumpDistance && moved / (float)(now - speedSampleAt).TotalSeconds > LaunchSpeed)
+                {
+                    launchedUntil = now + TimeSpan.FromMilliseconds(750);
+                }
+            }
+
+            speedSamplePosition = me.Position;
+            speedSampleAt = now;
+        }
+
+        if (now < launchedUntil)
         {
             return;
         }
@@ -188,7 +265,10 @@ public sealed unsafe class ForkedTowerNavigator(
 
         if (config.NavigateInsideTower)
         {
-            TickFollow(me, now);
+            if (!(config.UseTowerRoute && TickRoute(me, now)))
+            {
+                TickFollow(me, now);
+            }
         }
         else if (activity != Activity.Idle)
         {
@@ -203,6 +283,7 @@ public sealed unsafe class ForkedTowerNavigator(
         lastCrowdAnchor = null;
         sigilSearchCenter = null;
         confirmYesnoUntil = DateTime.MinValue;
+        ResetRoute();
     }
 
     private bool TickCoffer(IPlayerCharacter me, DateTime now)
@@ -354,6 +435,399 @@ public sealed unsafe class ForkedTowerNavigator(
         }
 
         MoveTo(me, target, MathF.Max(stopDistance - 1f, 0.5f), now);
+    }
+
+    /// <summary>
+    ///     Walks the recorded leg for the room we are in: waits while the group is beside or behind us on it,
+    ///     follows it along the leg when it is ahead, and walks on to the leg's pad once the group has gone.
+    /// </summary>
+    /// <returns>false when no leg covers where we are (or the group is off the leg) — follow the group then.</returns>
+    private bool TickRoute(IPlayerCharacter me, DateTime now)
+    {
+        if (now < routeFallbackUntil)
+        {
+            return false;
+        }
+
+        TowerRouteLeg? leg = LocateLeg(me.Position);
+        if (leg == null)
+        {
+            if (routeLeg != null)
+            {
+                logger.Info("[TowerNav] Not on any recorded route leg — following the group");
+                if (activity == Activity.Route)
+                {
+                    StopMovement();
+                }
+            }
+
+            ResetRoute();
+            return false;
+        }
+
+        List<TowerRoutePoint> points = leg.Points;
+        float[] along = Cumulative(points);
+        float total = along[^1];
+        if (!ReferenceEquals(leg, routeLeg))
+        {
+            ResetRoute();
+            routeLeg = leg;
+            routeCursor = Project(points, along, me.Position, 0, points.Count - 1, out _, out _);
+            logger.Info(
+                "[TowerNav] On a recorded route leg {Start} → {End} ({Length:F0}y, {Count} points), at point {Index}",
+                Format(points[0].Position),
+                Format(points[^1].Position),
+                total,
+                points.Count,
+                routeCursor);
+        }
+
+        int segment = Project(points, along, me.Position, Math.Max(0, routeCursor - 15), Math.Min(points.Count - 1, routeCursor + 40), out float mine, out float offRoute);
+        if (offRoute > 6f)
+        {
+            segment = Project(points, along, me.Position, 0, points.Count - 1, out mine, out offRoute);
+        }
+
+        routeCursor = segment;
+        Vector3 end = points[^1].Position;
+
+        // Once at the pad, stay with it: a lift pad carries us up and away from the line before it teleports.
+        if (routeLegEndSince != DateTime.MaxValue && me.Position.Distance2D(end) <= 8f)
+        {
+            return TickLegEnd(me, end, now);
+        }
+
+        Vector3? anchor = FindCrowdAnchor(me, out int size, out string source);
+        float startDistance = config.FollowStartDistance;
+        float stopDistance = MathF.Min(config.FollowStopDistance, startDistance - 1f);
+
+        float crowdAlong = 0f;
+        float crowdOff = float.MaxValue;
+        if (anchor is { } crowd)
+        {
+            Project(points, along, crowd, 0, points.Count - 1, out crowdAlong, out crowdOff);
+        }
+
+        if (now >= nextStatusLogAt)
+        {
+            nextStatusLogAt = now + StatusLogInterval;
+            logger.Info(
+                "[TowerNav] Route status: {Activity}, me {Me} at {Mine:F0}/{Total:F0}y ({Off:F1}y off), {Source} {Anchor} ({Size} players, {Crowd})",
+                activity,
+                Format(me.Position),
+                mine,
+                total,
+                offRoute,
+                source,
+                anchor is { } a ? Format(a) : "none",
+                size,
+                anchor == null ? "-" : crowdOff <= CrowdOnRouteDistance ? $"at {crowdAlong:F0}y" : $"{crowdOff:F0}y off the leg");
+        }
+
+        float goal;
+        string why;
+        if (anchor != null && crowdOff <= CrowdOnRouteDistance)
+        {
+            routeCrowdGoneSince = DateTime.MaxValue;
+            float ahead = crowdAlong - mine;
+            if (ahead <= (activity == Activity.Route ? stopDistance : startDistance))
+            {
+                StandOnRoute();
+                return true;
+            }
+
+            goal = crowdAlong - stopDistance;
+            why = "group";
+        }
+        else if (anchor is { } nearby && Vector3.Distance(me.Position, nearby) <= CrowdNearbyDistance)
+        {
+            // The group is fighting or detouring somewhere the recording doesn't go.
+            if (activity == Activity.Route)
+            {
+                StopMovement();
+            }
+
+            routeCrowdGoneSince = DateTime.MaxValue;
+            return false;
+        }
+        else
+        {
+            if (routeCrowdGoneSince == DateTime.MaxValue)
+            {
+                routeCrowdGoneSince = now;
+            }
+
+            if (now - routeCrowdGoneSince < CrowdGoneDelay)
+            {
+                StandOnRoute();
+                return true;
+            }
+
+            goal = total;
+            why = "leg end";
+        }
+
+        if (total - mine <= 3f && Vector3.Distance(me.Position, end) <= 4f)
+        {
+            return TickLegEnd(me, end, now);
+        }
+
+        return WalkRoute(me, points, along, mine, offRoute, goal, why, now);
+    }
+
+    private bool WalkRoute(IPlayerCharacter me, List<TowerRoutePoint> points, float[] along, float mine, float offRoute, float goal, string why, DateTime now)
+    {
+        if (goal <= mine + 0.5f)
+        {
+            StandOnRoute();
+            return true;
+        }
+
+        if (activity != Activity.Route)
+        {
+            Begin(Activity.Route, 0, now);
+            routeIssuedGoal = float.NaN;
+            routeProgressPosition = me.Position;
+            routeProgressAt = now;
+            logger.Info("[TowerNav] Walking the route to the {Why} ({Distance:F0}y along the leg)", why, goal - mine);
+        }
+
+        if (Vector3.Distance(me.Position, routeProgressPosition) > 2f)
+        {
+            routeProgressPosition = me.Position;
+            routeProgressAt = now;
+            routeStuckCount = 0;
+        }
+        else if (now - routeProgressAt > RouteStuckTime)
+        {
+            routeStuckCount++;
+            routeProgressAt = now;
+            routeIssuedGoal = float.NaN;
+            logger.Info("[TowerNav] No progress along the route at {Me} (#{Count})", Format(me.Position), routeStuckCount);
+            if (routeStuckCount >= 4)
+            {
+                GiveUpOnRoute("stuck", now);
+                return false;
+            }
+        }
+
+        // Back onto the line (pushed off, or back from a coffer), round whatever keeps blocking us, or across
+        // a stretch the recording has a gap in.
+        int next = FirstIndexAfter(along, mine + 0.5f);
+        if (offRoute > RouteOffDistance || routeStuckCount >= 2 || (points[next].Pathfind && along[next] <= goal))
+        {
+            routeIssuedGoal = float.NaN;
+            MoveTo(me, PointAlong(points, along, MathF.Min(goal, along[next])), 1f, now);
+            return true;
+        }
+
+        bool idle = !vnav.IsRunning() && !vnav.IsPathfinding();
+        bool sameGoal = !float.IsNaN(routeIssuedGoal) && MathF.Abs(routeIssuedGoal - goal) < 2f;
+        if (!idle && (sameGoal || now - routeIssuedAt < RepathInterval))
+        {
+            return true;
+        }
+
+        Vector3 destination = PointAlong(points, along, goal);
+        if (idle && sameGoal && (Vector3.Distance(me.Position, destination) < 1.5f || now - routeIssuedAt < RepathInterval))
+        {
+            return true;
+        }
+
+        List<Vector3> waypoints = [];
+        bool cut = false;
+        for (int i = next; i < points.Count && along[i] < goal; i++)
+        {
+            if (points[i].Pathfind && i > next)
+            {
+                cut = true;
+                break;
+            }
+
+            waypoints.Add(points[i].Position);
+        }
+
+        if (!cut)
+        {
+            waypoints.Add(destination);
+        }
+
+        routeIssuedGoal = goal;
+        routeIssuedAt = now;
+        lastDestination = destination;
+        lastDestinationAt = now;
+        vnav.FollowPath(waypoints, false);
+        return true;
+    }
+
+    private bool TickLegEnd(IPlayerCharacter me, Vector3 end, DateTime now)
+    {
+        if (routeLegEndSince == DateTime.MaxValue)
+        {
+            routeLegEndSince = now;
+            logger.Info("[TowerNav] End of the route leg at {End} — taking the pad", Format(end));
+        }
+
+        if (now - routeLegEndSince > LegEndGiveUp)
+        {
+            GiveUpOnRoute($"nothing happened at the end of the leg in {LegEndGiveUp.TotalSeconds}s", now);
+            return false;
+        }
+
+        // Interact pads first, then walk-on pads; a bare leg end is a walk-in trigger we already stand in.
+        if (FindSigilNear(end, now) != null && TickSigil(me, end, now))
+        {
+            return true;
+        }
+
+        IGameObject? pad = objects
+            .Where(o => TeleportSigilIds.Contains(o.BaseId)
+                        && o.IsValid()
+                        && !IsSkipped(o.GameObjectId, now)
+                        && Vector3.Distance(end, o.Position) <= PadNearEndRadius)
+            .MinBy(o => Vector3.Distance(end, o.Position));
+        if (pad != null && me.Position.Distance2D(pad.Position) > 0.8f)
+        {
+            if (activity != Activity.Route)
+            {
+                Begin(Activity.Route, pad.GameObjectId, now);
+            }
+
+            MoveTo(me, pad.Position, 0.3f, now);
+            return true;
+        }
+
+        StandOnRoute();
+        return true;
+    }
+
+    private TowerRouteLeg? LocateLeg(Vector3 position)
+    {
+        IReadOnlyList<TowerRouteLeg> legs = routes.GetLegs(client.TerritoryType);
+        if (routeLeg != null && legs.Contains(routeLeg) && DistanceToLeg(routeLeg, position) <= RouteKeepDistance)
+        {
+            return routeLeg;
+        }
+
+        TowerRouteLeg? best = null;
+        float bestDistance = RouteJoinDistance;
+        foreach (TowerRouteLeg leg in legs)
+        {
+            float distance = DistanceToLeg(leg, position);
+            if (distance <= bestDistance)
+            {
+                best = leg;
+                bestDistance = distance;
+            }
+        }
+
+        return best;
+    }
+
+    private static float DistanceToLeg(TowerRouteLeg leg, Vector3 position)
+    {
+        List<TowerRoutePoint> points = leg.Points;
+        float best = float.MaxValue;
+        for (int i = 0; i + 1 < points.Count; i++)
+        {
+            best = MathF.Min(best, Vector3.Distance(position, ClosestOnSegment(points[i].Position, points[i + 1].Position, position, out _)));
+        }
+
+        return best;
+    }
+
+    /// <summary>The segment in [from, to] nearest to <paramref name="position" />, and how far along the leg that is.</summary>
+    private static int Project(List<TowerRoutePoint> points, float[] along, Vector3 position, int from, int to, out float distanceAlong, out float offRoute)
+    {
+        int best = from;
+        distanceAlong = along[from];
+        offRoute = Vector3.Distance(position, points[from].Position);
+        for (int i = from; i < to && i + 1 < points.Count; i++)
+        {
+            Vector3 closest = ClosestOnSegment(points[i].Position, points[i + 1].Position, position, out float t);
+            float distance = Vector3.Distance(position, closest);
+            if (distance < offRoute)
+            {
+                best = i;
+                offRoute = distance;
+                distanceAlong = along[i] + (t * (along[i + 1] - along[i]));
+            }
+        }
+
+        return best;
+    }
+
+    private static Vector3 ClosestOnSegment(Vector3 a, Vector3 b, Vector3 p, out float t)
+    {
+        Vector3 ab = b - a;
+        float lengthSquared = ab.LengthSquared();
+        t = lengthSquared < 0.0001f ? 0f : Math.Clamp(Vector3.Dot(p - a, ab) / lengthSquared, 0f, 1f);
+        return a + (ab * t);
+    }
+
+    private static float[] Cumulative(List<TowerRoutePoint> points)
+    {
+        var along = new float[points.Count];
+        for (int i = 1; i < points.Count; i++)
+        {
+            along[i] = along[i - 1] + Vector3.Distance(points[i - 1].Position, points[i].Position);
+        }
+
+        return along;
+    }
+
+    private static int FirstIndexAfter(float[] along, float distance)
+    {
+        for (int i = 0; i < along.Length; i++)
+        {
+            if (along[i] > distance)
+            {
+                return i;
+            }
+        }
+
+        return along.Length - 1;
+    }
+
+    private static Vector3 PointAlong(List<TowerRoutePoint> points, float[] along, float distance)
+    {
+        for (int i = 1; i < points.Count; i++)
+        {
+            if (along[i] >= distance)
+            {
+                float length = along[i] - along[i - 1];
+                float t = length < 0.0001f ? 1f : Math.Clamp((distance - along[i - 1]) / length, 0f, 1f);
+                return Vector3.Lerp(points[i - 1].Position, points[i].Position, t);
+            }
+        }
+
+        return points[^1].Position;
+    }
+
+    private void StandOnRoute()
+    {
+        if (activity == Activity.Route)
+        {
+            StopMovement();
+        }
+    }
+
+    private void GiveUpOnRoute(string reason, DateTime now)
+    {
+        logger.Info("[TowerNav] Leaving the recorded route for {Seconds}s ({Reason}) — following the group", RouteFallback.TotalSeconds, reason);
+        routeFallbackUntil = now + RouteFallback;
+        StopMovement();
+        ResetRoute();
+    }
+
+    private void ResetRoute()
+    {
+        routeLeg = null;
+        routeCursor = 0;
+        routeIssuedGoal = float.NaN;
+        routeStuckCount = 0;
+        routeCrowdGoneSince = DateTime.MaxValue;
+        routeLegEndSince = DateTime.MaxValue;
     }
 
     /// <summary>The player nearest the middle of the biggest cluster — party members first, then everyone.</summary>
@@ -548,6 +1022,7 @@ public sealed unsafe class ForkedTowerNavigator(
 
         sigilSearchCenter = null;
         lastCrowdAnchor = null;
+        ResetRoute();
         StopMovement();
     }
 
