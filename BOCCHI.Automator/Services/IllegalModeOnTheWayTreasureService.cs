@@ -24,7 +24,8 @@ namespace BOCCHI.Automator.Services;
 
 /// <summary>
 ///     "On the way" automatic treasure hunt: while Illegal Mode walks a travel leg, open coffers
-///     that sit inside a corridor around the line player → leg destination, then resume travel.
+///     that sit inside a corridor around the line player → leg destination (or right next to the
+///     player in any direction), then resume travel.
 ///     Replaces the post-activity survey + full hunt route when
 ///     <see cref="AutomatorConfig.AutoTreasureHuntOnTheWay" /> is on.
 /// </summary>
@@ -56,17 +57,27 @@ public class IllegalModeOnTheWayTreasureService
     /// </summary>
     private const float CorridorHalfWidth = 25f;
 
+    /// <summary>Coffers this close (2D) to the player count in any direction, wherever the line runs.</summary>
+    private const float NearRadius = 45f;
+
     /// <summary>Height difference from the line (interpolated) — skips coffers on a ledge above / below.</summary>
     private const float MaxHeightDelta = 20f;
 
     /// <summary>Legs shorter than this are about to arrive — not worth a detour.</summary>
     private const float MinLegLength = 15f;
 
+    /// <summary>Unopened coffers this close that we leave alone get a (throttled) log line saying why.</summary>
+    private const float DiagnosticRange = 60f;
+
+    private static readonly TimeSpan DiagnosticInterval = TimeSpan.FromSeconds(30);
+
     private static readonly TimeSpan DetourTimeout = TimeSpan.FromSeconds(45);
 
     private static readonly TimeSpan FailedCofferSkip = TimeSpan.FromMinutes(3);
 
     private readonly Dictionary<ulong, DateTime> skipUntilUtc = [];
+
+    private readonly Dictionary<ulong, DateTime> lastSkipReportUtc = [];
 
     private Detour? detour;
 
@@ -97,15 +108,19 @@ public class IllegalModeOnTheWayTreasureService
             return;
         }
 
-        if (!CanStartDetour(out Vector3 legDestination))
+        if (!CanStartDetour(out Vector3 legDestination, out string blocked))
         {
+            ReportSkippedCoffer(FindNearestCandidate(), blocked);
             return;
         }
 
-        if (TryFindCofferOnTheWay(legDestination, out IGameObject? coffer))
+        if (TryFindCofferOnTheWay(legDestination, out IGameObject? coffer, out IGameObject? rejected, out string? reason))
         {
             BeginDetour(coffer!, legDestination);
+            return;
         }
+
+        ReportSkippedCoffer(rejected, reason);
     }
 
     private bool IsEnabled() =>
@@ -114,33 +129,50 @@ public class IllegalModeOnTheWayTreasureService
         && automatorConfig.UsesOnTheWayTreasureHunt
         && zones.GetZone().IsOccultCrescentZone();
 
-    private bool CanStartDetour(out Vector3 legDestination)
+    private bool CanStartDetour(out Vector3 legDestination, out string blocked)
     {
         legDestination = default;
 
-        if (automator.SuspendedForTreasure
-            || automator.SuspendedForShopping
-            || automator.FightingInForkedTower
-            || automator.CurrentState != AutomatorState.Pathfinding
-            || hunter.Running
-            || conditions[ConditionFlag.InCombat]
-            || conditions[ConditionFlag.BetweenAreas]
-            || conditions[ConditionFlag.Unconscious]
-            || memory.TryRemember<NavigationInterruptedMemory>(out NavigationInterruptedMemory _))
+        blocked = automator.SuspendedForTreasure ? "suspended for treasure"
+            : automator.SuspendedForShopping ? "suspended for shopping"
+            : automator.FightingInForkedTower ? "fighting in the Forked Tower"
+            : automator.CurrentState != AutomatorState.Pathfinding ? $"automator state {automator.CurrentState?.ToString() ?? "none"}"
+            : hunter.Running ? "treasure hunter running"
+            : conditions[ConditionFlag.InCombat] ? "in combat"
+            : conditions[ConditionFlag.BetweenAreas] ? "between areas"
+            : conditions[ConditionFlag.Unconscious] ? "unconscious"
+            : memory.TryRemember<NavigationInterruptedMemory>(out NavigationInterruptedMemory _) ? "navigation interrupted"
+            : string.Empty;
+
+        if (blocked.Length > 0)
         {
             return false;
         }
 
         // Forked Tower registration is time critical — no detours.
-        if (!memory.TryRemember<GoalMemory>(out GoalMemory goal) || goal.Goal.GoalType is ForkedTowerGoal)
+        if (!memory.TryRemember<GoalMemory>(out GoalMemory goal))
         {
+            blocked = "no goal";
+            return false;
+        }
+
+        if (goal.Goal.GoalType is ForkedTowerGoal)
+        {
+            blocked = "Forked Tower goal";
             return false;
         }
 
         // Only walking legs: teleport / return steps have no line to follow.
-        if (!memory.TryRemember<GoalPathStepMemory>(out GoalPathStepMemory path)
-            || path.GetNextPathStep()?.PathStepData is not Pathfind(var destination, _))
+        if (!memory.TryRemember<GoalPathStepMemory>(out GoalPathStepMemory path))
         {
+            blocked = "no path";
+            return false;
+        }
+
+        object? step = path.GetNextPathStep()?.PathStepData;
+        if (step is not Pathfind(var destination, _))
+        {
+            blocked = $"next step is {step?.GetType().Name ?? "none"}";
             return false;
         }
 
@@ -148,63 +180,146 @@ public class IllegalModeOnTheWayTreasureService
         return true;
     }
 
-    private bool TryFindCofferOnTheWay(Vector3 legDestination, out IGameObject? best)
+    /// <summary>Unopened bronze / silver coffer the on-the-way hunt would consider at all.</summary>
+    private bool IsCandidate(IGameObject obj)
+    {
+        if (obj is not { ObjectKind: ObjectKind.Treasure, IsDead: false } || !obj.IsValid())
+        {
+            return false;
+        }
+
+        if (TreasurePathing.IsUnloadAltitude(obj.Position) || OpenTreasureCofferChain.IsOpenedOrLooted(obj))
+        {
+            return false;
+        }
+
+        CofferType type = new TreasureCoffer(obj, data).GetCofferType();
+        return type is CofferType.Bronze or CofferType.Silver
+               && (!treasureConfig.HuntSilverChestsOnly || type == CofferType.Silver);
+    }
+
+    private IGameObject? FindNearestCandidate()
+    {
+        Vector3 origin = player.Position;
+        IGameObject? nearest = null;
+        float nearestDistance = DiagnosticRange;
+        foreach (IGameObject obj in objects)
+        {
+            if (obj.ObjectKind != ObjectKind.Treasure)
+            {
+                continue;
+            }
+
+            float distance = Vector3.Distance(origin, obj.Position);
+            if (distance < nearestDistance && IsCandidate(obj))
+            {
+                nearest = obj;
+                nearestDistance = distance;
+            }
+        }
+
+        return nearest;
+    }
+
+    /// <summary>
+    ///     Logs why a nearby unopened coffer was left alone — once per coffer every
+    ///     <see cref="DiagnosticInterval" />, so "it walked right past it" has an answer in the log.
+    /// </summary>
+    private void ReportSkippedCoffer(IGameObject? coffer, string? reason)
+    {
+        if (coffer == null || reason == null)
+        {
+            return;
+        }
+
+        float distance = Vector3.Distance(player.Position, coffer.Position);
+        if (distance > DiagnosticRange)
+        {
+            return;
+        }
+
+        DateTime now = DateTime.UtcNow;
+        if (lastSkipReportUtc.TryGetValue(coffer.GameObjectId, out DateTime last) && now - last < DiagnosticInterval)
+        {
+            return;
+        }
+
+        if (lastSkipReportUtc.Count > 64)
+        {
+            lastSkipReportUtc.Clear();
+        }
+
+        lastSkipReportUtc[coffer.GameObjectId] = now;
+        logger.Info("Illegal Mode: not opening coffer {Distance:F0}y away on the way ({Reason})", distance, reason);
+    }
+
+    private bool TryFindCofferOnTheWay(
+        Vector3 legDestination,
+        out IGameObject? best,
+        out IGameObject? rejected,
+        out string? reason)
     {
         best = null;
+        rejected = null;
+        reason = null;
 
         Vector3 origin = player.Position;
         Vector2 start = new(origin.X, origin.Z);
         Vector2 end = new(legDestination.X, legDestination.Z);
         float legLength = Vector2.Distance(start, end);
-        if (legLength < MinLegLength)
-        {
-            return false;
-        }
 
-        Vector2 direction = (end - start) / legLength;
+        // A leg about to arrive has no line worth following — only coffers right next to the player count.
+        bool shortLeg = legLength < MinLegLength;
+        Vector2 direction = shortLeg ? Vector2.Zero : (end - start) / legLength;
         float bestDetour = float.MaxValue;
+        float nearestRejected = DiagnosticRange;
+        IGameObject? nearestRejectedCoffer = null;
+        string? rejectReason = null;
         DateTime now = DateTime.UtcNow;
 
         foreach (IGameObject obj in objects)
         {
-            if (obj is not { ObjectKind: ObjectKind.Treasure, IsDead: false } || !obj.IsValid())
+            if (obj.ObjectKind != ObjectKind.Treasure || !IsCandidate(obj))
             {
                 continue;
             }
+
+            Vector3 position = obj.Position;
+            float fromPlayer = Vector3.Distance(origin, position);
 
             if (skipUntilUtc.TryGetValue(obj.GameObjectId, out DateTime until))
             {
                 if (now < until)
                 {
+                    Reject(obj, fromPlayer, "failed to open it recently");
                     continue;
                 }
 
                 skipUntilUtc.Remove(obj.GameObjectId);
             }
 
-            Vector3 position = obj.Position;
-            if (TreasurePathing.IsUnloadAltitude(position) || OpenTreasureCofferChain.IsOpenedOrLooted(obj))
-            {
-                continue;
-            }
-
-            CofferType type = new TreasureCoffer(obj, data).GetCofferType();
-            if (type is not (CofferType.Bronze or CofferType.Silver)
-                || (treasureConfig.HuntSilverChestsOnly && type != CofferType.Silver))
-            {
-                continue;
-            }
-
             Vector2 flat = new(position.X, position.Z);
-            float t = Math.Clamp(Vector2.Dot(flat - start, direction) / legLength, 0f, 1f);
-            if (Vector2.Distance(flat, start + (end - start) * t) > CorridorHalfWidth)
+            bool near = Vector2.Distance(start, flat) <= NearRadius;
+            if (!near && shortLeg)
             {
+                Reject(obj, fromPlayer, $"leg nearly done ({legLength:F0}y left)");
                 continue;
             }
 
-            float lineY = origin.Y + (legDestination.Y - origin.Y) * t;
-            if (MathF.Abs(position.Y - lineY) > MaxHeightDelta)
+            float t = shortLeg ? 0f : Math.Clamp(Vector2.Dot(flat - start, direction) / legLength, 0f, 1f);
+            float fromLine = Vector2.Distance(flat, start + (end - start) * t);
+            if (!near && fromLine > CorridorHalfWidth)
             {
+                Reject(obj, fromPlayer, $"{fromLine:F0}y off the travel line");
+                continue;
+            }
+
+            // Near coffers are compared with the player's own height, line ones with the line at that point.
+            float referenceY = near ? origin.Y : origin.Y + (legDestination.Y - origin.Y) * t;
+            float heightDelta = position.Y - referenceY;
+            if (MathF.Abs(heightDelta) > MaxHeightDelta)
+            {
+                Reject(obj, fromPlayer, $"{heightDelta:+0;-0}y height difference");
                 continue;
             }
 
@@ -217,7 +332,19 @@ public class IllegalModeOnTheWayTreasureService
             }
         }
 
+        rejected = nearestRejectedCoffer;
+        reason = rejectReason;
         return best != null;
+
+        void Reject(IGameObject obj, float distance, string why)
+        {
+            if (distance < nearestRejected)
+            {
+                nearestRejected = distance;
+                nearestRejectedCoffer = obj;
+                rejectReason = why;
+            }
+        }
     }
 
     private void BeginDetour(IGameObject coffer, Vector3 legDestination)
