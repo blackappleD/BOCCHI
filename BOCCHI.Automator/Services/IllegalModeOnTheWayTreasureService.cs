@@ -49,14 +49,12 @@ public class IllegalModeOnTheWayTreasureService
 {
     private const string ChainName = "IllegalMode::OnTheWayCoffer";
 
-    /// <summary>Max sideways distance (2D) from the travel line for a coffer to count as on the way.</summary>
+    /// <summary>
+    ///     Max 2D distance from the travel segment player → leg destination for a coffer to count as on
+    ///     the way. Measured to the segment, so coffers beside or behind the player, or a little past the
+    ///     destination, count too as long as they are this close.
+    /// </summary>
     private const float CorridorHalfWidth = 25f;
-
-    /// <summary>Coffers slightly behind the player still count — the line is re-anchored every tick.</summary>
-    private const float BehindSlack = 8f;
-
-    /// <summary>Coffers a little past the leg destination still count.</summary>
-    private const float AheadSlack = 10f;
 
     /// <summary>Height difference from the line (interpolated) — skips coffers on a ledge above / below.</summary>
     private const float MaxHeightDelta = 20f;
@@ -164,7 +162,7 @@ public class IllegalModeOnTheWayTreasureService
         }
 
         Vector2 direction = (end - start) / legLength;
-        float bestAlong = float.MaxValue;
+        float bestDetour = float.MaxValue;
         DateTime now = DateTime.UtcNow;
 
         foreach (IGameObject obj in objects)
@@ -197,28 +195,24 @@ public class IllegalModeOnTheWayTreasureService
                 continue;
             }
 
-            Vector2 relative = new Vector2(position.X, position.Z) - start;
-            float along = Vector2.Dot(relative, direction);
-            if (along < -BehindSlack || along > legLength + AheadSlack)
+            Vector2 flat = new(position.X, position.Z);
+            float t = Math.Clamp(Vector2.Dot(flat - start, direction) / legLength, 0f, 1f);
+            if (Vector2.Distance(flat, start + (end - start) * t) > CorridorHalfWidth)
             {
                 continue;
             }
 
-            float sideways = (relative - direction * along).Length();
-            if (sideways > CorridorHalfWidth)
-            {
-                continue;
-            }
-
-            float lineY = origin.Y + (legDestination.Y - origin.Y) * Math.Clamp(along / legLength, 0f, 1f);
+            float lineY = origin.Y + (legDestination.Y - origin.Y) * t;
             if (MathF.Abs(position.Y - lineY) > MaxHeightDelta)
             {
                 continue;
             }
 
-            if (along < bestAlong)
+            // Extra walking the coffer adds to the leg — prefers coffers along the way over ones behind.
+            float detourCost = Vector2.Distance(start, flat) + Vector2.Distance(flat, end) - legLength;
+            if (detourCost < bestDetour)
             {
-                bestAlong = along;
+                bestDetour = detourCost;
                 best = obj;
             }
         }
