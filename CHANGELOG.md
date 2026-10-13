@@ -1,20 +1,19 @@
-# 4.2.0.17
+# 4.2.0.18
 
 ### Mob Farmer
-- "Refresh crystal buffs when low" now works: it heads back to camp, rebuffs at the knowledge crystal, then returns to your farm spot
-- After pausing for pots, Treasure Hunt or buffs, it walks back to the farm spot instead of standing where it ended up
-- No longer leaves for pots in the middle of a pull
-- Keeps fighting mobs that aggro on their own, even ones outside your mob selection or level limit
-- No more mount/unmount spam while walking back to the farm spot
+- Optional: Prioritize pots during timed hunt — runs the timer as Pots & Treasure so a Magic Pot still interrupts the route
 
 ### Illegal Mode
-- No longer waits for pot chests after skipping a pot FATE it never joined
-
-### Dependencies
-- Missing plugins can be installed straight from the Dependencies page: add the repository and install in one click, or open the installer for ones that are installed but turned off
+- Pause auto treasure hunt for CEs waits until you are out of combat before pausing (no soft-stop mid-pull)
 
 ### Fixes
-- Phantom job names in the Wrath Combo action list now follow the plugin language instead of the game client language
-- Pot chests that sit off the navmesh can be reached and opened again: BOCCHI walks the last few yalms in a straight line instead of stopping short
-- A revealed pot chest is opened even when BOCCHI got stuck a few yalms away, instead of waiting there until the buff runs out
-- Treasure Hunt jumps up onto ledge coffers again (e.g. the Wanderer's Haven west coast) instead of giving up on them
+- Pots & Treasure no longer thrash when a live pot is past the Skip FATE progress % (still finish the pot)
+- Treasure Hunt keeps the wind-safe approach to Suspended Masonry coffer 2061 (no longer skips the via when the chest looks closer)
+- Auto shopping aborts and cools down when Knightshopper denies start (IPC) or is busy, instead of retrying every tick
+- Pausing Treasure Hunt restores your previous gearset after Ninja Hide (CE/FATE/pot yields)
+- Pot chest farm enables combat AI if you take aggro mid-open, and only opens pot-spot reveals (not nearby map coffers)
+
+### Forked Tower
+- Illegal Mode can optionally walk to the tower pad when registration opens (Config → Forked Tower)
+- Turns itself off once you are inside
+- Registration countdown now shows for North Horn too
