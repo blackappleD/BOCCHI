@@ -159,7 +159,8 @@ public sealed class CarrotHunterService
             return;
         }
 
-        if (!InventoryItemAssist.Has(FortuneCarrotItemId))
+        bool scout = treasureConfig.CarrotHuntScoutWithoutItem;
+        if (!scout && !InventoryItemAssist.Has(FortuneCarrotItemId))
         {
             BocchiChat.PrintError(chat, uiConfig, "No Fortune Carrots in inventory.");
             return;
@@ -181,9 +182,10 @@ public sealed class CarrotHunterService
         pandoraAutoOpen.Hold();
         RecalculateAndAdvance();
         log.Information(
-            "Carrot hunt started ({Kind}, {Count} spots)",
+            "Carrot hunt started ({Kind}, {Count} spots{Scout})",
             zones.GetZone().ZoneId == ZoneId.NorthHorn ? "North Horn Middle→NW→NE" : "nearest-neighbor TSP",
-            tour.Count);
+            tour.Count,
+            scout ? ", scout without item" : "");
     }
 
     public bool UseFortuneCarrot()
@@ -320,7 +322,7 @@ public sealed class CarrotHunterService
             return false;
         }
 
-        if (!InventoryItemAssist.Has(FortuneCarrotItemId))
+        if (!treasureConfig.CarrotHuntScoutWithoutItem && !InventoryItemAssist.Has(FortuneCarrotItemId))
         {
             BocchiChat.PrintError(chat, uiConfig, OutOfCarrotsMessage);
             return false;
@@ -710,6 +712,13 @@ public sealed class CarrotHunterService
 
         if (!InventoryItemAssist.Has(FortuneCarrotItemId))
         {
+            if (treasureConfig.CarrotHuntScoutWithoutItem)
+            {
+                log.Debug("Carrot hunt: scout — no Fortune Carrot at {Pos:F0}, skipping use", currentTargetPosition);
+                SkipCurrentAuthored();
+                return;
+            }
+
             BocchiChat.PrintError(chat, uiConfig, OutOfCarrotsMessage);
             Teardown();
             return;
@@ -962,7 +971,7 @@ public sealed class CarrotHunterService
             return;
         }
 
-        if (!InventoryItemAssist.Has(FortuneCarrotItemId))
+        if (!treasureConfig.CarrotHuntScoutWithoutItem && !InventoryItemAssist.Has(FortuneCarrotItemId))
         {
             BocchiChat.PrintError(chat, uiConfig, OutOfCarrotsMessage);
             Teardown();

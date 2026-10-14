@@ -38,6 +38,9 @@ public class TreasureConfig : IAutoConfig
     [Checkbox(Order = 9, Section = "carrot_hunt")]
     public bool LoopCarrotHunt { get; set; } = false;
 
+    [Checkbox(Order = 9, Section = "carrot_hunt")]
+    public bool CarrotHuntScoutWithoutItem { get; set; } = false;
+
     [Checkbox(Order = 10, Section = "treasure_hunt")]
     public bool CastTreasureSightDuringHunt { get; set; } = true;
 
