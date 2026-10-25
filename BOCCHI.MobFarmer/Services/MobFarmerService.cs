@@ -40,6 +40,8 @@ public class MobFarmerService
 
     private IStateMachine<FarmerPhase>? stateMachine;
 
+    private bool aiPullRequested;
+
     private IStateMachine<FarmerPhase> StateMachine => stateMachine ??= stateMachineFactory();
 
     public bool Running { get; private set; }
@@ -193,7 +195,7 @@ public class MobFarmerService
         // Self-defence while still gathering / buffing / stacking — AI used to stay off until Fighting.
         if (Phase == FarmerPhase.Fighting
             || ((Phase is FarmerPhase.Gathering or FarmerPhase.Buffing or FarmerPhase.Stacking)
-                && (scanner.InCombat.Any() || conditions[ConditionFlag.InCombat])))
+                && (scanner.InCombat.Any() || conditions[ConditionFlag.InCombat] || aiPullRequested)))
         {
             if (Phase != FarmerPhase.Fighting)
             {
@@ -209,6 +211,7 @@ public class MobFarmerService
             pathfinder.Stop();
         }
 
+        aiPullRequested = false;
         StateMachine.Update();
     }
 
@@ -238,6 +241,8 @@ public class MobFarmerService
 
         return true;
     }
+
+    public void RequestAiPull() => aiPullRequested = true;
 
     private void StopInternal()
     {

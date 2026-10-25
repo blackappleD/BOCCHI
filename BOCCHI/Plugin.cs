@@ -196,6 +196,8 @@ public sealed class Plugin(IDalamudPluginInterface plugin, IPluginLog logger) : 
             migrator.Migrate();
         }
 
+        migrator.PruneBackups();
+
         Configuration cfg = plugin.GetPluginConfig() as Configuration ?? new Configuration();
         EnsureAutoConfigInstances(cfg);
         EnsureConfigDefaults(cfg);
