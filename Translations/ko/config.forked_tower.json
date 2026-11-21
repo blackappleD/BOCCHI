@@ -1,6 +1,6 @@
 {
   "label": "포크 타워",
-  "tooltip": "포크 타워 보조. 함정 표시는 남부만 지원.",
+  "tooltip": "포크 타워 도우미. 함정 위치는 남쪽 뿔만 알려져 있습니다.",
   "sections": {
     "helpers": "보조",
     "illegal_mode": "자동 모드",
@@ -9,11 +9,11 @@
   "fields": {
     "draw_potential_trap_positions": {
       "label": "함정 예상 위치 표시",
-      "tooltip": "남부 포크 타워 안 알려진 함정 스폰 지점에 원을 그림."
+      "tooltip": "남쪽 뿔 포크 타워 안에서 함정이 나올 수 있는 곳에 원을 그립니다."
     },
     "show_registration_countdown": {
       "label": "등록 카운트다운 표시",
-      "tooltip": "비상 조우 목록에 포크 타워 등록/준비 카운트다운 표시(북부·남부)."
+      "tooltip": "포크 타워 등록이 얼마나 남았는지 비상 조우 목록에 표시합니다."
     },
     "trap_draw_range": {
       "label": "이 거리 이내 함정만 표시(일름)"

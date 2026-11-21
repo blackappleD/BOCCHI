@@ -12,7 +12,7 @@
     },
     "silver_threshold": {
       "label": "Silver threshold",
-      "tooltip": "Start shopping when silver pieces (South Horn) or silver obols (North Horn) reach this. Never during a FATE or CE, or mid Mob Farmer pull/fight. 0 = never start from silver."
+      "tooltip": "Go shopping when you have this much silver. 0 = don't shop for silver."
     },
     "gold_threshold": {
       "label": "Gold threshold",

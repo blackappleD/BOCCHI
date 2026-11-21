@@ -130,6 +130,9 @@ public class FarmingPotChestsHandler
 
     private bool defendingInCombat;
 
+
+    private readonly OutrunTimer outrun = new();
+
     private readonly NinjaHideRouteGate ninjaHideRouteGate = new();
 
     private bool ninjaHideRequired;
@@ -153,6 +156,7 @@ public class FarmingPotChestsHandler
         chainManager.CancelAll();
         pathfinder.Stop();
         activeChain = null;
+        outrun.Reset();
         ClearTravelPlan();
         preferDirectApproach = false;
         lastPathIssueAt = DateTimeOffset.MinValue;
@@ -197,10 +201,13 @@ public class FarmingPotChestsHandler
             return;
         }
 
+        bool inCombat = conditions[ConditionFlag.InCombat];
+        bool chased = outrun.Update(inCombat, DateTimeOffset.UtcNow);
+        bool fightAggro = inCombat && (KnowledgeThreat.CanFightAggro(objects) || chased);
         if (activeChain is { IsCompleted: false })
         {
             // Open/travel chains used to return before self-defence — aggro mid-open left AI off.
-            if (conditions[ConditionFlag.InCombat])
+            if (fightAggro)
             {
                 chainManager.CancelAll();
                 pathfinder.Stop();
@@ -299,13 +306,18 @@ public class FarmingPotChestsHandler
 
         activeChain = null;
 
-        if (conditions[ConditionFlag.InCombat])
+        if (fightAggro)
         {
             pathfinder.Stop();
             ClearTravelPlan();
             preferDirectApproach = false;
             lastPathIssueAt = DateTimeOffset.MinValue;
             lastPathDestination = null;
+
+            if (DismountAssist.TryDismount(conditions))
+            {
+                return;
+            }
 
             if (!defendingInCombat)
             {
@@ -918,6 +930,8 @@ public class FarmingPotChestsHandler
 
     private void ResumeSearchOrBlind(PotChestFarmMemory farm)
     {
+        farm.DropFirstPotCandidates();
+
         if (farm.Candidates.Count > 0)
         {
             farm.Phase = PotChestFarmPhase.SearchingCandidates;

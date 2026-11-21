@@ -96,6 +96,9 @@ public class AutomatorConfig : IAutoConfig
     [TriageRaiseJob(Order = 12, Indent = 1, Requires = nameof(EnableTriageMode), Section = "triage")]
     public TriageRaiseJobPreference PreferredTriageRaiseJob { get; set; } = TriageRaiseJobPreference.PhantomChemist;
 
+    [IntRange(0, 30, Order = 12, Indent = 1, Requires = nameof(EnableTriageMode), Section = "triage")]
+    public int TriageDelaySeconds { get; set; } = 0;
+
     [Checkbox(Order = 13, Section = "treasure")]
     public bool EnableAutomaticTreasureHuntDuringIllegalMode { get; set; } = false;
 
@@ -169,4 +172,12 @@ public class AutomatorConfig : IAutoConfig
 
     [EnumSelectDisplay<AutoRepairMethod, AutoRepairMethodDisplay>(Order = 23, Section = "repair")]
     public AutoRepairMethod AutoRepairMethod { get; set; } = AutoRepairMethod.SelfRepair;
+
+    // blackappleD fork: AutoAcceptRaise (+ delay) is declared in the triage section above and is shared with upstream's AutoRevive.
+
+    [Checkbox(Order = 24, Section = "death")]
+    public bool ReturnToBaseCampAfterDeath { get; set; } = false;
+
+    [IntRange(10, 300, Order = 25, Indent = 1, Requires = nameof(ReturnToBaseCampAfterDeath), Section = "death")]
+    public int ReturnAfterDeathDelaySeconds { get; set; } = 60;
 }

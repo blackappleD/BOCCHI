@@ -48,6 +48,8 @@ public sealed class WaitingForCriticalEncounterMemory(CriticalEncounterId encoun
     public bool IsFor(CriticalEncounterId id) => EncounterId == id;
 }
 
+public sealed class TreasureHuntSelfDefenceMemory;
+
 public sealed class WaitingForForkedTowerMemory(CriticalEncounterId towerId)
 {
     public CriticalEncounterId TowerId { get; } = towerId;
@@ -261,6 +263,15 @@ public sealed class PotChestFarmMemory
     public bool OnRerollPool { get; set; }
 
     public bool HasOpenedChest { get; set; }
+
+    // After the first chest the leftover spots belong to the first pot; the second-chance spots are a different list.
+    public void DropFirstPotCandidates()
+    {
+        if (HasOpenedChest && !OnRerollPool)
+        {
+            Candidates.Clear();
+        }
+    }
 
     public DateTimeOffset WaitingForSpawnSince { get; set; } = DateTimeOffset.MinValue;
 

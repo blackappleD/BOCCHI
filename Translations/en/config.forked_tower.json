@@ -1,6 +1,6 @@
 {
   "label": "Forked Tower",
-  "tooltip": "Forked Tower helpers. Trap spots are South Horn only.",
+  "tooltip": "Help for Forked Tower. Trap spots are only known for South Horn.",
   "sections": {
     "helpers": "Helpers",
     "illegal_mode": "Illegal Mode",
@@ -9,11 +9,11 @@
   "fields": {
     "draw_potential_trap_positions": {
       "label": "Show possible trap spots",
-      "tooltip": "Draw circles on known trap spawn points inside South Horn Forked Tower."
+      "tooltip": "Draw circles where traps can appear inside the South Horn Forked Tower."
     },
     "show_registration_countdown": {
       "label": "Show registration countdown",
-      "tooltip": "Show Forked Tower registration / warmup countdown in the Critical Encounters list (North and South Horn)."
+      "tooltip": "Show how long Forked Tower registration stays open in the Critical Encounters list."
     },
     "trap_draw_range": {
       "label": "Only show traps within (yalms)"

@@ -15,7 +15,7 @@
       "using": "正在使用 {0}",
       "in_use": "使用中",
       "ready": "就绪",
-      "map_loading": "地图仍在加载",
+      "map_loading": "地图仍在加载。请等到这里显示“就绪”。",
       "not_working": "无法使用",
       "outdated": "需要更新",
       "not_enabled": "未启用",

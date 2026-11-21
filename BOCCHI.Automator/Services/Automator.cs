@@ -120,7 +120,7 @@ public class Automator
             return;
         }
 
-        IllegalModeActivityWork.ForgetTravelLatches(memory);
+        IllegalModeActivityWork.ForgetLatchesForHunt(memory);
         SoftStopPathfinding();
         autoRotation.DisableAi();
     }

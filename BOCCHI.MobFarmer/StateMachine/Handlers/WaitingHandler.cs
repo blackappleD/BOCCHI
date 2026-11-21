@@ -47,11 +47,13 @@ public class WaitingHandler
     private bool longTravelExhausted;
 
     private DateTime? mountBeforeTravelDeadline;
+    private DateTime? readySinceUtc;
 
     public override void Exit(FarmerPhase next)
     {
         stuckAssist.Reset();
         ResetTravel();
+        readySinceUtc = null;
         base.Exit(next);
     }
 
@@ -101,13 +103,15 @@ public class WaitingHandler
             }
         }
 
+        readySinceUtc ??= DateTime.UtcNow;
         int free = MobFarmerPack.CountTowardMinimum(scanner.NotInCombat, config.CountSpecialMobsTowardMinimum);
-        if (free == 0)
-        {
-            return null;
-        }
-
-        return free >= config.MinimumMobsToStartLoop ? FarmerPhase.Buffing : null;
+        return MobFarmerRules.ShouldStartPull(
+            free,
+            config.MinimumMobsToStartLoop,
+            DateTime.UtcNow - readySinceUtc.Value,
+            TimeSpan.FromSeconds(config.StackingTimeoutSeconds))
+            ? FarmerPhase.Buffing
+            : null;
     }
 
     private bool TryLongTravel(float distance)

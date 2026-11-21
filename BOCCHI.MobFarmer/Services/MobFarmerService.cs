@@ -5,6 +5,7 @@ using BOCCHI.Common.Services;
 using BOCCHI.MobFarmer.Data;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
+using Ocelot.Services.Logger;
 using Ocelot.Extensions;
 using Ocelot.Lifecycle;
 using Ocelot.Services.Pathfinding;
@@ -33,14 +34,19 @@ public class MobFarmerService
     IFarmerCombatController combat,
     FarmerSpotSession spots,
     FarmerTravel travel,
-    FarmerAoeDodger dodger
+    FarmerAoeDodger dodger,
+    ILogger<MobFarmerService> logger
 ) : IMobFarmer, IOnUpdate, IOnStop
 {
     public int Order => 10;
 
+    private FarmerPhase loggedPhase;
+
     private IStateMachine<FarmerPhase>? stateMachine;
 
     private bool aiPullRequested;
+
+    private bool gatheringAiOn;
 
     private IStateMachine<FarmerPhase> StateMachine => stateMachine ??= stateMachineFactory();
 
@@ -120,6 +126,8 @@ public class MobFarmerService
         spots.Begin();
         StartingPoint = spots.Origin;
         combat.Prepare();
+        loggedPhase = Phase;
+        logger.Info("Mob Farmer started at {Spot}", spots.Name ?? "where you are standing");
     }
 
     public void SetSuspended(bool suspended, FarmerYieldReason reason = FarmerYieldReason.None)
@@ -138,6 +146,7 @@ public class MobFarmerService
         YieldReason = suspended ? reason : FarmerYieldReason.None;
         travel.Cancel();
         dodger.Reset();
+        logger.Info(suspended ? "Mob Farmer paused for {Reason}" : "Mob Farmer resumed", reason);
         pathfinder.Stop();
         combat.Disable();
 
@@ -177,6 +186,7 @@ public class MobFarmerService
 
         if (!zones.GetZone().IsOccultCrescentZone())
         {
+            logger.Info("Left Occult Crescent — stopping Mob Farmer");
             StopInternal();
             BocchiChat.Print(chat, uiConfig, translator.T(".automation.mob_farmer.off_left_zone"));
             return;
@@ -192,27 +202,48 @@ public class MobFarmerService
             return;
         }
 
-        // Self-defence while still gathering / buffing / stacking — AI used to stay off until Fighting.
-        if (Phase == FarmerPhase.Fighting
-            || ((Phase is FarmerPhase.Gathering or FarmerPhase.Buffing or FarmerPhase.Stacking)
-                && (scanner.InCombat.Any() || conditions[ConditionFlag.InCombat] || aiPullRequested)))
+        // blackappleD fork: self-defence while still gathering / buffing / stacking when something is already
+        // attacking us. Otherwise (upstream) the rotation only runs to tag a mob, or it spends cooldowns before
+        // the pack is stacked.
+        bool selfDefence = (Phase is FarmerPhase.Gathering or FarmerPhase.Buffing or FarmerPhase.Stacking)
+            && (scanner.InCombat.Any() || conditions[ConditionFlag.InCombat]);
+        if (Phase == FarmerPhase.Fighting)
         {
-            if (Phase != FarmerPhase.Fighting)
+            gatheringAiOn = false;
+            combat.Tick();
+        }
+        else if (selfDefence || aiPullRequested)
+        {
+            if (!gatheringAiOn)
             {
-                combat.EnableFighting();
+                logger.Debug(selfDefence ? "Mob Farmer: rotation on for self-defence" : "Mob Farmer: rotation on to tag an enemy");
             }
 
+            gatheringAiOn = true;
+            combat.EnableFighting();
             combat.Tick();
+        }
+        else if (gatheringAiOn)
+        {
+            gatheringAiOn = false;
+            combat.Disable();
+            logger.Debug("Mob Farmer: rotation off until the fight");
         }
 
         if (Phase == FarmerPhase.Waiting && spots.TickClaimed(scanner))
         {
             StartingPoint = spots.Origin;
             pathfinder.Stop();
+            logger.Info("Mob Farmer: spot claimed by other players — moving to {Spot}", spots.Name ?? "the next spot");
         }
 
         aiPullRequested = false;
         StateMachine.Update();
+        if (Phase != loggedPhase)
+        {
+            logger.Debug("Mob Farmer: {From} → {To}", loggedPhase, Phase);
+            loggedPhase = Phase;
+        }
     }
 
     /// <summary>
@@ -244,8 +275,15 @@ public class MobFarmerService
 
     public void RequestAiPull() => aiPullRequested = true;
 
+    public bool CanAiPull => combat.IsActive;
+
     private void StopInternal()
     {
+        if (Running)
+        {
+            logger.Info("Mob Farmer stopped");
+        }
+
         Running = false;
         Suspended = false;
         YieldReason = FarmerYieldReason.None;

@@ -1,6 +1,6 @@
 {
   "label": "两歧塔",
-  "tooltip": "两歧塔的辅助功能。陷阱位置仅支持南部。",
+  "tooltip": "两歧塔辅助功能。目前只知道南部的陷阱位置。",
   "sections": {
     "helpers": "辅助",
     "illegal_mode": "违规模式",
@@ -9,11 +9,11 @@
   "fields": {
     "draw_potential_trap_positions": {
       "label": "显示可能的陷阱位置",
-      "tooltip": "在南部两歧塔内已知陷阱刷新点绘制圆圈。"
+      "tooltip": "在南部两歧塔内可能出现陷阱的位置画圈。"
     },
     "show_registration_countdown": {
       "label": "显示报名倒计时",
-      "tooltip": "在紧急遭遇战列表中显示两歧塔报名／准备倒计时（北部、南部均可）。"
+      "tooltip": "在紧急遭遇战列表中显示两歧塔报名还剩多久。"
     },
     "trap_draw_range": {
       "label": "仅显示该距离内的陷阱（米）"

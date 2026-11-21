@@ -29,6 +29,7 @@ public class IllegalModeTreasureFillerService
     IFateRepository fates,
     IIllegalModeStartableActivityProbe startableActivities,
     ICondition conditions,
+    IObjectTable objects,
     AutomatorConfig automatorConfig,
     FatesConfig fatesConfig,
     PotsConfig potsConfig,
@@ -37,6 +38,10 @@ public class IllegalModeTreasureFillerService
 ) : IOnUpdate
 {
     public int Order => 0;
+
+    private readonly OutrunTimer outrun = new();
+
+    private bool defendingHunt;
 
     private bool hadPrimaryActivity;
 
@@ -164,6 +169,11 @@ public class IllegalModeTreasureFillerService
             return;
         }
 
+        if (ShouldYieldHuntToSelfDefence())
+        {
+            return;
+        }
+
         if (memory.TryRemember<NavigationInterruptedMemory>(out NavigationInterruptedMemory _))
         {
             return;
@@ -182,7 +192,7 @@ public class IllegalModeTreasureFillerService
         if (ShouldYieldHuntForImminentPot())
         {
             PauseHuntForYield("pot");
-            if (EzThrottler.Throttle("IllegalModeMapHuntYieldPot", 5000))
+            if (EzThrottler.Throttle("IllegalModeMapHuntYieldPot", 60000))
             {
                 logger.Info(
                     "Illegal Mode: pausing treasure hunt — pot within {Minutes}m leave-early window",
@@ -335,7 +345,7 @@ public class IllegalModeTreasureFillerService
         // CE open mid-pull: wait until combat clears so Pause does not soft-stop / dismount under aggro.
         if (kind == "CE" && conditions[ConditionFlag.InCombat])
         {
-            if (EzThrottler.Throttle("IllegalModeMapHuntYieldCombat", 5000))
+            if (EzThrottler.Throttle("IllegalModeMapHuntYieldCombat", 60000))
             {
                 logger.Debug("Illegal Mode: deferring hunt pause for CE — still in combat");
             }
@@ -344,12 +354,63 @@ public class IllegalModeTreasureFillerService
         }
 
         PauseHuntForYield(kind);
-        if (EzThrottler.Throttle("IllegalModeMapHuntYield", 5000))
+        if (EzThrottler.Throttle("IllegalModeMapHuntYield", 60000))
         {
             logger.Info("Illegal Mode: pausing treasure hunt — {Kind} available", kind);
         }
 
         return true;
+    }
+
+    // The hunt itself never fights; hand a mob it could not outrun (or a death) to Illegal Mode.
+    private bool ShouldYieldHuntToSelfDefence()
+    {
+        if (conditions[ConditionFlag.Unconscious])
+        {
+            outrun.Reset();
+            StopDefendingHunt();
+            if (!hunter.Paused)
+            {
+                logger.Info("Illegal Mode: pausing treasure hunt — you are down");
+            }
+
+            PauseHuntForYield("death");
+            return true;
+        }
+
+        bool stillChased = outrun.Update(conditions[ConditionFlag.InCombat], DateTimeOffset.UtcNow)
+                           && automatorConfig.CombatAutorotation.UsesCombatAutomation()
+                           && (defendingHunt || !hunter.Paused);
+        if (!stillChased)
+        {
+            StopDefendingHunt();
+            return false;
+        }
+
+        if (!defendingHunt)
+        {
+            defendingHunt = true;
+            memory.TryAdd<TreasureHuntSelfDefenceMemory>();
+            logger.Info(
+                "Illegal Mode: pausing treasure hunt to fight — still attacked after {Seconds}s (attacker level {Enemy}, your Knowledge Level {Mine})",
+                (int)CombatRules.OutrunGrace.TotalSeconds,
+                KnowledgeThreat.HighestAttackerLevel(objects)?.ToString() ?? "?",
+                KnowledgeThreat.TryGetPlayerForayLevel(objects)?.ToString() ?? "?");
+        }
+
+        PauseHuntForYield("combat");
+        return true;
+    }
+
+    private void StopDefendingHunt()
+    {
+        if (!defendingHunt)
+        {
+            return;
+        }
+
+        defendingHunt = false;
+        memory.Forget<TreasureHuntSelfDefenceMemory>();
     }
 
     private void PauseHuntForYield(string reason)

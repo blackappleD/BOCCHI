@@ -15,7 +15,7 @@
       "using": "사용 중: {0}",
       "in_use": "사용 중",
       "ready": "준비됨",
-      "map_loading": "맵 로딩 중",
+      "map_loading": "지도를 불러오는 중입니다. 준비됨으로 바뀔 때까지 기다리세요.",
       "not_working": "동작 안 함",
       "outdated": "업데이트 필요",
       "not_enabled": "꺼짐",

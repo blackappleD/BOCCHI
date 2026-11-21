@@ -28,6 +28,8 @@ public class PathCalculator
     IFateRepository fates,
     IFateContext fateContext,
     AutomatorConfig config,
+    MovementConfig movement,
+    IFramework framework,
     CriticalEncounterGeometry geometry,
     IVNavmeshIpc vnav,
     ILogger<PathCalculator> logger
@@ -48,6 +50,7 @@ public class PathCalculator
             return PathCalculationResult.NoTravelNeeded();
         }
 
+        bool preferReturn = IsReturnPreferredNow();
         float distance = player.Position.Distance2D(destination);
         if (distance <= arrivalRange)
         {
@@ -67,7 +70,8 @@ public class PathCalculator
             zone,
             player.Position,
             goalNode,
-            distance > NavigationConstants.MaxDirectWalkDistance);
+            distance > NavigationConstants.MaxDirectWalkDistance,
+            preferReturn);
 
         if (steps.Count == 0)
         {
@@ -101,14 +105,14 @@ public class PathCalculator
     {
         if (objects.LocalPlayer is not { } player)
         {
-            logger.Warn("No Player");
+            logger.Debug("Path for {Goal}: no player", goal.GoalType);
             return PathCalculationResult.NoTravelNeeded();
         }
 
         IZone zone = zones.GetZone();
         if (!zone.IsOccultCrescentZone())
         {
-            logger.Warn("In wrong zone");
+            logger.Debug("Path for {Goal}: not in Occult Crescent", goal.GoalType);
             return PathCalculationResult.NoTravelNeeded();
         }
 
@@ -122,6 +126,7 @@ public class PathCalculator
             return PathCalculationResult.NoTravelNeeded();
         }
 
+        bool preferReturn = IsReturnPreferredNow();
         ZoneGraph graph = await zone.GetGraph();
 
         Node goalNode;
@@ -233,7 +238,8 @@ public class PathCalculator
             zone,
             player.Position,
             pathGoal,
-            !insideCeWait && distanceToGoal > NavigationConstants.MaxDirectWalkDistance);
+            !insideCeWait && distanceToGoal > NavigationConstants.MaxDirectWalkDistance,
+            preferReturn);
 
         if (potPrepositionStandOff is { } standOff)
         {
@@ -395,19 +401,22 @@ public class PathCalculator
         return NavigationConstants.IsWithinFateAiHandoff(toCenter, nearest);
     }
 
+    // Action state is only safe to read on the framework thread; a retry after an await may not be on it.
+    private bool IsReturnPreferredNow() =>
+        movement.PreferReturnOverShardWalk && framework.IsInFrameworkUpdateThread && OccultReturn.CanCast();
+
     private async Task<List<PathStep>> FindResolvedPathSteps(
         ZoneGraph graph,
         IZone zone,
         Vector3 from,
         Node goal,
-        bool addReturnCalculator)
+        bool addReturnCalculator,
+        bool preferReturn)
     {
         GraphTraverser traverser = new(graph, pathfinder, logger);
-        traverser.AddCalculator(new WalkTeleportWalkCalculator());
-        traverser.AddCalculator(new DirectWalkCalculator());
-        if (addReturnCalculator)
+        foreach (IGraphCandidateCalculator calculator in RouteOptions.Calculators(addReturnCalculator, preferReturn))
         {
-            traverser.AddCalculator(new ReturnTeleportWalkCalculator());
+            traverser.AddCalculator(calculator);
         }
 
         List<PathStep> steps = await traverser.FindPath(from, goal);

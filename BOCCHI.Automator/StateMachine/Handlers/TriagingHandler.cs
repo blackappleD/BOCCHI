@@ -109,10 +109,19 @@ public class TriagingHandler
             return;
         }
 
-        if (DateTimeOffset.UtcNow - sessionStartedUtc >= SessionTimeout)
+        TriageStage stage = TriageRules.Stage(
+            DateTimeOffset.UtcNow - sessionStartedUtc,
+            TimeSpan.FromSeconds(config.TriageDelaySeconds),
+            SessionTimeout);
+        if (stage == TriageStage.TimedOut)
         {
             logger.Info("Triage Mode: session timeout");
             FinishTriage();
+            return;
+        }
+
+        if (stage == TriageStage.Waiting)
+        {
             return;
         }
 
@@ -183,7 +192,7 @@ public class TriagingHandler
 
         if (TryCastRaise(corpse))
         {
-            logger.Debug("Triage Mode: raise on {Name}", corpse.Name.TextValue);
+            logger.Debug("Triage Mode: raising a player");
         }
     }
 

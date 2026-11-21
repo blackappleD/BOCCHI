@@ -127,7 +127,7 @@ public class ChoosingActivityHandler
         {
             IGoal goal = goalFactory.Fate(fate.Id);
             memory.TryAdd(new GoalMemory(goal));
-            logger.Info("Chose FATE {Id} ({Name})", fate.Id.Value, fate.Name);
+            logger.Info("Chose FATE {Id} ({Name}) at {Progress}%", fate.Id.Value, fate.Name, fate.Progress);
             return;
         }
 
@@ -194,10 +194,8 @@ public class ChoosingActivityHandler
                 automatorConfig.ShouldPrepositionToPots))
         {
             return SkipPreposition(
-                !automatorConfig.ShouldDoFates
-                    ? "\"Do FATEs\" is off"
-                    : $"pot FATE {cycle.PredictedNextPotFateId} is not an allowed FATE "
-                      + "(tick it under Allowed FATEs, or turn on \"Prefer pot FATEs\")");
+                $"pot FATE {cycle.PredictedNextPotFateId} is not an allowed FATE "
+                + "(tick it under Allowed FATEs, or turn on \"Prefer pot FATEs\")");
         }
 
         if (CompletionistBlocksFate((uint)cycle.PredictedNextPotFateId))

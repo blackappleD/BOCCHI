@@ -11,6 +11,8 @@ public static class ZoneServiceCollectionExtensions
         services.AddSingleton<IPotCycleTracker, PotCycleTracker>();
         services.AddSingleton<PotCycleSyncService>();
         services.AddSingleton<StuckJumpAssist>();
+        services.AddSingleton<YesAlreadyPause>();
+        services.AddSingleton<AutoRevive>();
         return services;
     }
 

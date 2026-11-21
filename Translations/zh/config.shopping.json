@@ -12,7 +12,7 @@
     },
     "silver_threshold": {
       "label": "银币阈值",
-      "tooltip": "南角银币、北角银奥博达到该值时开始购物。FATE/CE 进行中、刷怪拉怪/战斗中不会开始。0 = 不因银币开始。"
+      "tooltip": "银币达到这个数量时去购物。0＝不因银币去购物。"
     },
     "gold_threshold": {
       "label": "金币阈值",

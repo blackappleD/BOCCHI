@@ -58,6 +58,17 @@ public static class ReturnYesNo
         return false;
     }
 
+    public static unsafe bool IsPartyInvite(AtkUnitBase* addon)
+    {
+        if (addon == null || !templatesLoaded || partyInviteTemplate.Length == 0)
+        {
+            return false;
+        }
+
+        string prompt = ReadPrompt(addon);
+        return prompt.Length > 0 && MatchesLocalizedPrompt(prompt, partyInviteTemplate);
+    }
+
     public static unsafe bool TryAccept(AtkUnitBase* addon)
     {
         if (addon == null || !addon->IsVisible)
@@ -88,6 +99,8 @@ public static class ReturnYesNo
 
         return string.Empty;
     }
+
+    public static bool MatchesTemplate(string prompt, string template) => MatchesLocalizedPrompt(prompt, template);
 
     private static bool LooksLikeReturnPrompt(string prompt)
     {

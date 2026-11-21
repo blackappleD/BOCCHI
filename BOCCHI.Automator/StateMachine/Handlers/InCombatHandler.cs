@@ -1,11 +1,12 @@
 ﻿using BOCCHI.Automator.Data;
 using BOCCHI.Automator.Services;
 using BOCCHI.Common.Data.StateMemory;
+using BOCCHI.Common.Data.Zones;
 using BOCCHI.Common.Services;
+using BOCCHI.Treasure.Services;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
-using ECommons.Throttlers;
-using Ocelot.Actions;
+using Ocelot.Services.Logger;
 using Ocelot.Services.Pathfinding;
 using Ocelot.States.Score;
 
@@ -19,13 +20,24 @@ public class InCombatHandler
     ICriticalEncounterContext criticalEncounterContext,
     IPathfinder pathfinder,
     IAutomatorMemory memory,
-    AutoRotationController autoRotation
+    AutoRotationController autoRotation,
+    ILogger<InCombatHandler> logger
 ) : ScoreStateHandler<AutomatorState, StatePriority>(AutomatorState.InCombat)
 {
+    private const StatePriority AboveWaiting = StatePriority.VeryHigh + 1;
+
+    private bool defendingWaitSpot;
+
+    private bool aiEnabled;
+
+    private bool loggedNotFighting;
+
     public override StatePriority GetScore()
     {
-        if (objects.LocalPlayer == null)
+        if (objects.LocalPlayer == null || !conditions[ConditionFlag.InCombat])
         {
+            defendingWaitSpot = false;
+            loggedNotFighting = false;
             return StatePriority.Never;
         }
 
@@ -34,34 +46,43 @@ public class InCombatHandler
             return StatePriority.Never;
         }
 
-        // Pot chest farming also scores High and runs its own self-defence — winning the tie
-        // just interrupts the farm on every combat flicker.
+        // Pot chest farming also scores High and runs its own fight-or-keep-searching logic.
         if (memory.TryRemember<PotChestFarmMemory>(out PotChestFarmMemory _)
             || memory.TryRemember<PendingPotChestFarmMemory>(out PendingPotChestFarmMemory _))
         {
             return StatePriority.Never;
         }
 
+        // The pot wait forgets its memory on exit, so remember here or the two states flip every tick.
+        defendingWaitSpot |= memory.TryRemember<WaitingForPotFateMemory>(out WaitingForPotFateMemory _)
+            || memory.TryRemember<WaitingForCriticalEncounterMemory>(out WaitingForCriticalEncounterMemory _)
+            || memory.TryRemember<WaitingForForkedTowerMemory>(out WaitingForForkedTowerMemory _)
+            || memory.TryRemember<TreasureHuntSelfDefenceMemory>(out TreasureHuntSelfDefenceMemory _);
+        if (defendingWaitSpot)
+        {
+            return AboveWaiting;
+        }
+
         if (memory.TryRemember<GoalPathStepMemory>(out GoalPathStepMemory _))
         {
+            if (KnowledgeThreat.CanFightAggro(objects))
+            {
+                return StatePriority.High + 1;
+            }
+
+            if (!loggedNotFighting)
+            {
+                loggedNotFighting = true;
+                logger.Info(
+                    "Attacked while travelling by a level {Enemy} enemy (your Knowledge Level: {Mine}) — not stopping to fight",
+                    Level(KnowledgeThreat.HighestAttackerLevel(objects)),
+                    Level(KnowledgeThreat.TryGetPlayerForayLevel(objects)));
+            }
+
             return StatePriority.Never;
         }
 
-        return conditions[ConditionFlag.InCombat] ? StatePriority.High : StatePriority.Never;
-    }
-
-    public override void Enter()
-    {
-        base.Enter();
-        // Open-world trash, or a fight BOCCHI lost track of (raised after the goal expired,
-        // mode restarted mid-CE). Nothing else arms combat here, so without this we stand idle.
-        autoRotation.EnableForSelfDefence();
-    }
-
-    public override void Exit(AutomatorState next)
-    {
-        autoRotation.DisableAi();
-        base.Exit(next);
+        return StatePriority.High;
     }
 
     public override void Handle()
@@ -71,15 +92,39 @@ public class InCombatHandler
             return;
         }
 
-        // Open-world trash only — FATE/CE combat is InFate / InCriticalEncounter.
-
-        if (conditions[ConditionFlag.Mounted])
+        pathfinder.Stop();
+        if (DismountAssist.TryDismount(conditions) || aiEnabled)
         {
-            if (EzThrottler.Throttle("InCombat::Unmount") && Actions.Unmount.CanCast())
-            {
-                Actions.Unmount.Cast();
-                pathfinder.Stop();
-            }
+            return;
+        }
+
+        aiEnabled = true;
+        autoRotation.EnableForSelfDefence();
+    }
+
+    public override void Enter()
+    {
+        base.Enter();
+        aiEnabled = false;
+        logger.Info(
+            "In combat: {Reason} (attacker level {Enemy}, your Knowledge Level {Mine})",
+            memory.TryRemember<TreasureHuntSelfDefenceMemory>(out TreasureHuntSelfDefenceMemory _)
+                ? "could not outrun it during the treasure hunt"
+                : defendingWaitSpot ? "defending the waiting spot" : "fighting back",
+            Level(KnowledgeThreat.HighestAttackerLevel(objects)),
+            Level(KnowledgeThreat.TryGetPlayerForayLevel(objects)));
+    }
+
+    private static object Level(int? level) => level is { } value ? value : "?";
+
+    public override void Exit(AutomatorState next)
+    {
+        base.Exit(next);
+        defendingWaitSpot = false;
+        if (aiEnabled)
+        {
+            aiEnabled = false;
+            autoRotation.DisableAi();
         }
     }
 }

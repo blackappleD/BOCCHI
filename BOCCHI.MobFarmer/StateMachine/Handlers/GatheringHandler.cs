@@ -35,11 +35,18 @@ public class GatheringHandler
 
     private readonly FarmerWalkStuckAssist stuckAssist = new();
 
-    private readonly HashSet<ulong> skippedMobIds = [];
+    private static readonly TimeSpan AiPullPatience = TimeSpan.FromSeconds(8);
+
+    private readonly SkipList skippedMobs = new(TimeSpan.FromMinutes(5));
+
+    private ulong aiPullMobId;
+
+    private DateTime aiPullSinceUtc;
 
     public override void Exit(FarmerPhase next)
     {
         stuckAssist.Reset();
+        aiPullMobId = 0;
         base.Exit(next);
     }
 
@@ -47,7 +54,7 @@ public class GatheringHandler
     {
         List<IBattleNpc> inCombat = scanner.InCombat.ToList();
         List<IBattleNpc> notInCombat = scanner.NotInCombat
-            .Where(o => !skippedMobIds.Contains(o.GameObjectId))
+            .Where(o => !skippedMobs.IsSkipped(o.GameObjectId, DateTime.UtcNow))
             .ToList();
 
         if (MobFarmerPack.CountTowardMinimum(inCombat, config.CountSpecialMobsTowardMinimum)
@@ -97,6 +104,7 @@ public class GatheringHandler
         }
 
         float dist = player.Position.Distance2D(current.Position);
+        bool pulled = current.IsTargetingPlayer(objects.LocalPlayer);
         if (dist <= FarmerPullAssist.PullRange)
         {
             // Non-tanks have no pull tool; without the AI nothing ever starts the fight.
@@ -104,13 +112,32 @@ public class GatheringHandler
             {
                 pull.TryPull(current);
             }
-            else
+            else if (!pulled)
             {
+                // The rotation only attacks what is targeted; without this an "Auto-target off" setup never pulls.
+                if (targets.Target?.GameObjectId != current.GameObjectId)
+                {
+                    targets.Target = current;
+                }
+
+                if (aiPullMobId != current.GameObjectId)
+                {
+                    aiPullMobId = current.GameObjectId;
+                    aiPullSinceUtc = DateTime.UtcNow;
+                }
+
                 farmer.RequestAiPull();
+                // vnav movement cancels the AI's cast, so stand still until the mob is tagged.
+                if (farmer.CanAiPull
+                    && dist <= player.GetAttackRange() + current.HitboxRadius
+                    && DateTime.UtcNow - aiPullSinceUtc < AiPullPatience)
+                {
+                    pathfinder.Stop();
+                    return null;
+                }
             }
         }
 
-        bool pulled = current.IsTargetingPlayer(objects.LocalPlayer);
         Vector3 destination = Destination(current.Position, nextPos, dist, pulled);
 
         FarmerWalkStuckAssist.Recovery recovery = stuckAssist.Tick(
@@ -164,7 +191,7 @@ public class GatheringHandler
                     "Mob Farmer: giving up on {Name} after stuck recoveries — trying another mob",
                     current.Name.TextValue);
                 pathfinder.Stop();
-                skippedMobIds.Add(current.GameObjectId);
+                skippedMobs.Skip(current.GameObjectId, DateTime.UtcNow);
                 return true;
 
             default:
