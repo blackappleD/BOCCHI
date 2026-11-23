@@ -68,6 +68,11 @@ public sealed class ShoppingService(
 
     private IShoppingBackend Backend => session ?? backends.Current;
 
+    // Everything else is paused while shopping holds priority, so a Return or purchase that never ends must give up.
+    private static readonly TimeSpan MaxSession = TimeSpan.FromMinutes(10);
+
+    private DateTimeOffset? activeSinceUtc;
+
     public bool IsActive =>
         priorityClaimed || session?.HasRun == true || campReturn.HasChain || forcedSession;
 
@@ -181,6 +186,19 @@ public sealed class ShoppingService(
                 AbortShopping(resumeAutomation: true, cancelRun: true);
             }
 
+            return;
+        }
+
+        if (!IsActive)
+        {
+            activeSinceUtc = null;
+        }
+        else if (DateTimeOffset.UtcNow - (activeSinceUtc ??= DateTimeOffset.UtcNow) >= MaxSession)
+        {
+            logger.Warning("[Shopping] gave up after {Minutes} minutes — resuming automation", (int)MaxSession.TotalMinutes);
+            activeSinceUtc = null;
+            AbortShopping(resumeAutomation: true, cancelRun: true);
+            buyCooldownUntil = DateTimeOffset.UtcNow + DefaultBuyCooldown + DefaultBuyCooldown;
             return;
         }
 

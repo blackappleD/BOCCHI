@@ -25,8 +25,7 @@
     "mobfarmer": "刷怪",
     "world": "世界",
     "treasure": "寻宝",
-    "automation_normal": "普通",
-    "open_settings": "打开此标签页的设置"
+    "automation_normal": "普通"
   },
   "status": {
     "automator": "违规模式",
@@ -151,7 +150,6 @@
       "path_map_ready_built": "已就绪（为本区域构建）",
       "path_map_rebuilding": "[BOCCHI] 正在重建本区域路径图…",
       "path_map_rebuild_wrong_zone": "[BOCCHI] 仅可在神典石内重建路径图。",
-      "details": "详情",
       "forked_tower_route_saved": "[BOCCHI] 已保存塔内路线：{legs} 段，{points} 个点（{file}）",
       "illegal_mode_on": "[BOCCHI] 违规模式已开启",
       "illegal_mode_off": "[BOCCHI] 违规模式已关闭",

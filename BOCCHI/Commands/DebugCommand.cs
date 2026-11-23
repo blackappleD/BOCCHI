@@ -93,7 +93,7 @@ public unsafe class DebugCommand
                 break;
             default:
                 chat.PrintError(
-                    "Usage: /bocchi debug [open|close|toggle|ai-preset|pos|chests|instance|currency|ce [id]|shop [status|cancel]]");
+                    "Usage: /bocchi debug [open|close|toggle|ai-preset|pos|chests|instance|currency|ce [id]|shop [start|status|cancel]]");
                 break;
         }
     }
@@ -102,17 +102,17 @@ public unsafe class DebugCommand
     ///     Return to base camp if needed, then start the configured shopping backend
     ///     (GatherBuddy Reborn vendor list or Knightshopper’s Occult Crescent list)
     ///     (no currency threshold; works with auto-shop off).
-    ///     <c>/bocchi debug shop</c> · <c>shop status</c> · <c>shop cancel</c>
+    ///     <c>/bocchi debug shop start</c> · <c>shop status</c> · <c>shop cancel</c>
     /// </summary>
     private void DebugShopping(string? sub)
     {
-        string action = (sub ?? "start").ToLowerInvariant();
+        string action = (sub ?? "status").ToLowerInvariant();
         if (action is "help" or "?")
         {
             BocchiChat.Print(
                 chat,
                 uiConfig,
-                "Usage: /bocchi debug shop [status|cancel] — Return to base camp, then run the configured shopping backend (GatherBuddy Reborn / Knightshopper).");
+                "Usage: /bocchi debug shop [start|status|cancel] — start: Return to base camp, then run the configured shopping backend (GatherBuddy Reborn / Knightshopper).");
             return;
         }
 
@@ -140,7 +140,7 @@ public unsafe class DebugCommand
             BocchiChat.PrintError(
                 chat,
                 uiConfig,
-                "Usage: /bocchi debug shop [status|cancel]");
+                "Usage: /bocchi debug shop [start|status|cancel]");
             return;
         }
 

@@ -2,6 +2,7 @@ using BOCCHI.Common.Data.Zones;
 using Ocelot.Config;
 using Ocelot.Config.Fields;
 using Ocelot.Config.Renderers.Enum;
+using Ocelot.UI;
 
 namespace BOCCHI.Common.Config;
 
@@ -31,9 +32,9 @@ public class UILanguageDisplay : IEnumDisplay<UILanguage>
 {
     public string Display(UILanguage value) => value switch
     {
-        UILanguage.Japanese => "日本語",
-        UILanguage.Korean => "한국어",
-        UILanguage.ChineseSimplified => "简体中文",
+        UILanguage.Japanese => "Japanese",
+        UILanguage.Korean => "Korean",
+        UILanguage.ChineseSimplified => "Chinese (Simplified)",
         _ => "English"
     };
 }
@@ -48,52 +49,59 @@ public class UIConfig : IAutoConfig
     [Checkbox(Order = 1, Section = "general")]
     public bool OpenOnOccultCrescentEntry { get; set; } = false;
 
-    [Checkbox(Order = 2, Section = "trackers")]
-    public bool ShowExperienceTracker { get; set; } = true;
+    [Checkbox(Order = 2, Section = "general")]
+    public bool UseBocchiTheme
+    {
+        get => OcelotTheme.Enabled;
+        set => OcelotTheme.Enabled = value;
+    }
 
     [Checkbox(Order = 3, Section = "trackers")]
-    public bool ShowExperienceTrackerGraph { get; set; } = false;
+    public bool ShowExperienceTracker { get; set; } = true;
 
     [Checkbox(Order = 4, Section = "trackers")]
-    public bool ShowCurrencyTracker { get; set; } = true;
+    public bool ShowExperienceTrackerGraph { get; set; } = false;
 
     [Checkbox(Order = 5, Section = "trackers")]
-    public bool ShowCurrencyTrackerGraph { get; set; } = false;
+    public bool ShowCurrencyTracker { get; set; } = true;
 
     [Checkbox(Order = 6, Section = "trackers")]
+    public bool ShowCurrencyTrackerGraph { get; set; } = false;
+
+    [Checkbox(Order = 7, Section = "trackers")]
     public bool ShowActiveTreasureTracker { get; set; } = true;
 
-    [Checkbox(Order = 7, Section = "events")]
+    [Checkbox(Order = 8, Section = "events")]
     public bool ShowDemiatmaDrops { get; set; } = true;
 
-    [Checkbox(Order = 8, Section = "events")]
+    [Checkbox(Order = 9, Section = "events")]
     public bool ShowNoteDrops { get; set; } = true;
 
-    [Checkbox(Order = 9, Section = "events")]
+    [Checkbox(Order = 10, Section = "events")]
     public bool ShowSoulShardDrops { get; set; } = true;
 
-    [Checkbox(Order = 10, Section = "panels")]
+    [Checkbox(Order = 11, Section = "panels")]
     public bool ShowWorldSection { get; set; } = true;
 
-    [Checkbox(Order = 11, Section = "panels")]
+    [Checkbox(Order = 12, Section = "panels")]
     public bool ShowBuffSection { get; set; } = true;
 
-    [Checkbox(Order = 12, Section = "panels")]
+    [Checkbox(Order = 13, Section = "panels")]
     public bool ShowAutomationSection { get; set; } = true;
 
-    [Checkbox(Order = 13, Section = "panels")]
+    [Checkbox(Order = 14, Section = "panels")]
     public bool ShowCompletionistSection { get; set; } = true;
 
-    [Checkbox(Order = 14, Section = "panels")]
+    [Checkbox(Order = 15, Section = "panels")]
     public bool ShowMobFarmerSection { get; set; } = true;
 
-    [Checkbox(Order = 15, Section = "panels")]
+    [Checkbox(Order = 16, Section = "panels")]
     public bool ShowPotsTreasureSection { get; set; } = true;
 
-    [Checkbox(Order = 16, Section = "panels")]
+    [Checkbox(Order = 17, Section = "panels")]
     public bool ShowTreasureSection { get; set; } = true;
 
-    [Checkbox(Order = 17, Section = "chat")]
+    [Checkbox(Order = 18, Section = "chat")]
     public bool ShowBocchiChatPrefix { get; set; } = true;
 
     // Drawn by the main window's out-of-zone screen, not the config window.

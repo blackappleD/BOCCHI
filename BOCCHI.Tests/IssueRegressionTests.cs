@@ -8,7 +8,6 @@ using BOCCHI.Treasure.Hunt;
 using Ocelot.Chain.Middleware.Step;
 using Ocelot.Rotation.Services;
 using Ocelot.Services.Gate;
-using Ocelot.Services.Logger;
 using Xunit;
 
 namespace BOCCHI.Tests;
@@ -25,6 +24,7 @@ public class IssueRegressionTests
         PromptOpen: true,
         RaisePending: false,
         PromptIsReturn: false,
+        InForkedTower: false,
         ProtectedContent: false,
         SawAlive: true,
         DeadFor: TimeSpan.FromSeconds(90));
@@ -89,6 +89,22 @@ public class IssueRegressionTests
         Assert.Equal(AutoReviveAction.Nothing, action);
     }
 
+    // Owner decision 2026-11-22: no reviving at all in Forked Tower; raises are accepted in FATEs and CEs.
+    [Fact]
+    public void NothingIsClickedInsideForkedTower()
+    {
+        Assert.Equal(AutoReviveAction.Nothing, AutoReviveRule.Decide(Dead with { InForkedTower = true, RaisePending = true }).Action);
+        Assert.Equal(AutoReviveAction.Nothing, AutoReviveRule.Decide(Dead with { InForkedTower = true }).Action);
+    }
+
+    [Fact]
+    public void ARaiseIsAcceptedInsideACriticalEncounter()
+    {
+        (AutoReviveAction action, _) = AutoReviveRule.Decide(Dead with { RaisePending = true, ProtectedContent = true });
+
+        Assert.Equal(AutoReviveAction.AcceptRaise, action);
+    }
+
     // Second opinion: the guard was off when the plugin loaded while you were already dead.
     [Fact]
     public void YouAreNotReturnedIfThePluginNeverSawYouAlive()
@@ -119,21 +135,6 @@ public class IssueRegressionTests
     public void NothingIsClickedWithoutAPrompt()
     {
         Assert.Equal(AutoReviveAction.Nothing, AutoReviveRule.Decide(Dead with { PromptOpen = false }).Action);
-    }
-
-    // YesAlready would answer the revive prompt first; and must only be switched back on if we switched it off.
-    [Fact]
-    public void YesAlreadyIsPausedWhileDeadAndRestoredAfterwards()
-    {
-        Assert.Equal((false, true), YesAlreadyPause.Decide(wantPause: true, isEnabledNow: true, pausedByBocchi: false));
-        Assert.Equal((true, false), YesAlreadyPause.Decide(wantPause: false, isEnabledNow: false, pausedByBocchi: true));
-    }
-
-    [Fact]
-    public void YesAlreadyTheUserSwitchedOffStaysOff()
-    {
-        Assert.Equal((null, false), YesAlreadyPause.Decide(wantPause: true, isEnabledNow: false, pausedByBocchi: false));
-        Assert.Equal((null, false), YesAlreadyPause.Decide(wantPause: false, isEnabledNow: false, pausedByBocchi: false));
     }
 
     // The party-invite box must never be mistaken for the return box.
@@ -203,7 +204,7 @@ public class IssueRegressionTests
     public void TearingDownTheRotationSwitchesItOffAndForgetsIt()
     {
         RecordingRotation rotation = new();
-        CombatRotationSession session = new([rotation], [], null!, new QuietLogger<CombatRotationSession>());
+        CombatRotationSession session = new([rotation], [], null!, new QuietLog<CombatRotationSession>());
         session.Prepare(new CombatRotationRecipe(JobRotationBackendKind.RotationSolverReborn, CombatAiKind.None));
         session.Enable(CombatActivity.Fate);
 
@@ -251,38 +252,5 @@ public class IssueRegressionTests
         }
 
         public void Teardown() => Calls.Add("teardown");
-    }
-
-    private sealed class QuietLogger<T> : ILogger<T>
-    {
-        public void Log(string format, params object[] args) { }
-
-        public void Info(string format, params object[] args) { }
-
-        public void Warn(string format, params object[] args) { }
-
-        public void Warning(string format, params object[] args) { }
-
-        public void Error(string format, params object[] args) { }
-
-        public void Debug(string format, params object[] args) { }
-
-        public void Fatal(string format, params object[] args) { }
-
-        public void Verbose(string format, params object[] args) { }
-
-        public void Fatal(Exception? exception, string messageTemplate, params object[] values) { }
-
-        public void Error(Exception? exception, string messageTemplate, params object[] values) { }
-
-        public void Warn(Exception? exception, string messageTemplate, params object[] values) { }
-
-        public void Warning(Exception? exception, string messageTemplate, params object[] values) { }
-
-        public void Info(Exception? exception, string messageTemplate, params object[] values) { }
-
-        public void Debug(Exception? exception, string messageTemplate, params object[] values) { }
-
-        public void Verbose(Exception? exception, string messageTemplate, params object[] values) { }
     }
 }
